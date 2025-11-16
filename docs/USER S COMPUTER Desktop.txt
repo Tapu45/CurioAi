@@ -1,0 +1,254 @@
+┌─────────────────────────────────────────────────────────────────┐
+│                    USER'S COMPUTER (Desktop)                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │         Electron Desktop App (desktop/)                 │   │
+│  │  ┌────────────────────────────────────────────────────┐  │   │
+│  │  │  Activity Tracker → Content Extractor              │  │   │
+│  │  └──────────────────┬─────────────────────────────────┘  │   │
+│  │                     │                                     │   │
+│  │  ┌──────────────────▼─────────────────────────────────┐  │   │
+│  │  │  Local AI Service (desktop/src/local-ai-service/)   │  │   │
+│  │  │  • Ollama (local LLM)                                │  │   │
+│  │  │  • sentence-transformers (local)                    │  │   │
+│  │  │  • spaCy (local NER)                                 │  │   │
+│  │  └──────────────────┬─────────────────────────────────┘  │   │
+│  │                     │                                     │   │
+│  │  ┌──────────────────▼─────────────────────────────────┐  │   │
+│  │  │  Local Storage (desktop/src/main/storage/)          │  │   │
+│  │  │  • SQLite (activities, summaries)                   │  │   │
+│  │  │  • ChromaDB (local vectors)                         │  │   │
+│  │  │  • Neo4j Lite (local graph)                         │  │   │
+│  │  └─────────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                     │ (Optional Sync)                            │
+│                     │ HTTPS Encrypted                           │
+└─────────────────────┼───────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CLOUD INFRASTRUCTURE                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  API Gateway (Nginx)                                      │   │
+│  │  • Routes requests                                        │   │
+│  │  • SSL/TLS termination                                   │   │
+│  └──────────────┬───────────────────────────────────────────┘   │
+│                 │                                                 │
+│     ┌───────────┼───────────┐                                    │
+│     │           │           │                                    │
+│     ▼           ▼           ▼                                    │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                          │
+│  │ Backend │ │ AI      │ │ Graph   │                          │
+│  │ Service │ │ Service │ │ Service │                          │
+│  │(backend/)│ │(ai-    │ │         │                          │
+│  │         │ │ service/)│ │         │                          │
+│  │ Node.js │ │ Python  │ │ Python  │                          │
+│  │ Express │ │ FastAPI  │ │ NetworkX│                          │
+│  └────┬────┘ └────┬────┘ └────┬────┘                          │
+│       │           │           │                                │
+│       └───────────┼───────────┘                                │
+│                   │                                             │
+│       ┌───────────▼───────────┐                                │
+│       │   Database Layer      │                                │
+│       │  (database/schemas/)  │                                │
+│       │                        │                                │
+│       │  ┌────────┐ ┌────────┐ ┌────────┐                     │
+│       │  │Postgres│ │ Neo4j  │ │ChromaDB│                     │
+│       │  │  SQL   │ │  Cloud  │ │  Cloud │                     │
+│       │  └────────┘ └────────┘ └────────┘                     │
+│       └────────────────────────────────────┘                    │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Web Dashboard (website/)                                │   │
+│  │  • Next.js frontend                                      │   │
+│  │  • Graph visualization                                   │   │
+│  │  • Chat interface                                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+
+1. User opens browser → YouTube "React Hooks Tutorial"
+   │
+   ▼
+2. Activity Tracker detects (active-win)
+   • App: "Google Chrome"
+   • Title: "React Hooks Tutorial - YouTube"
+   • URL: "https://youtube.com/watch?v=..."
+   │
+   ▼
+3. Content Extractor (desktop/src/main/extractors/)
+   • Extracts video transcript
+   • Cleans text
+   │
+   ▼
+4. Local AI Service (desktop/src/local-ai-service/)
+   • Summarizes using Ollama (local)
+   • Generates embedding (sentence-transformers)
+   • Extracts concepts (spaCy)
+   │
+   ▼
+5. Local Storage (desktop/src/main/storage/)
+   • SQLite: Stores activity + summary
+   • ChromaDB: Stores embedding vector
+   • Neo4j Lite: Creates graph node "React Hooks"
+   │
+   ▼
+6. Result: Data stored locally, works offline!
+
+
+7. Sync Service (desktop/src/main/services/sync-service.js)
+   • Checks if sync enabled
+   • Encrypts data
+   • Sends to cloud API
+   │
+   ▼
+8. Backend Service (backend/)
+   • Receives encrypted data
+   • Validates user (JWT)
+   • Stores in PostgreSQL
+   │
+   ▼
+9. AI Service (ai-service/) - Advanced processing
+   • Uses GPT-4 for better summary (optional)
+   • Advanced concept extraction
+   • Updates cloud knowledge graph
+   │
+   ▼
+10. Database Layer (database/schemas/)
+    • PostgreSQL: User data, activities
+    • Neo4j Cloud: Global knowledge graph
+    • ChromaDB Cloud: Vector search
+    │
+    ▼
+11. Web Dashboard (website/)
+    • User logs in
+    • Sees graph visualization
+    • Can chat: "What did I learn about React?"
+
+
+1. Downloads CurioAI.dmg (includes bundled local AI service)
+2. Installs app
+3. Opens app → Activity tracking starts
+4. Reads Medium article about "TypeScript Generics"
+   │
+   ▼
+   Desktop App captures:
+   • URL: medium.com/article
+   • Content: Full article text
+   │
+   ▼
+   Local AI Service processes:
+   • Summary: "TypeScript generics allow..."
+   • Concepts: ["TypeScript", "Generics", "Type Safety"]
+   • Embedding: [0.23, -0.45, ...] (384-dim vector)
+   │
+   ▼
+   Local Storage saves:
+   • SQLite: Activity record
+   • ChromaDB: Vector embedding
+   • Neo4j Lite: Creates node "TypeScript Generics"
+
+1. User clicks "Enable Sync" in settings
+2. Creates account (backend/auth.service.js)
+3. Desktop syncs existing data
+   │
+   ▼
+   Sync Process:
+   • Encrypts local data
+   • Sends to backend/ (HTTPS)
+   • Backend stores in PostgreSQL
+   • AI Service (ai-service/) enhances with GPT-4
+   • Updates Neo4j Cloud graph
+
+1. User visits curioai.com
+2. Logs in (backend/auth.service.js)
+3. Sees knowledge graph (website/)
+   │
+   ▼
+   Web Dashboard Flow:
+   • Frontend (website/) requests data
+   • Backend (backend/) queries PostgreSQL
+   • AI Service (ai-service/) provides insights
+   • Graph Service builds visualization
+   • User sees: "TypeScript Generics" connected to "React"
+   
+User: "What did I learn about TypeScript?"
+   │
+   ▼
+   Chat Flow:
+   1. Frontend sends query (website/)
+   2. Backend (backend/) receives
+   3. AI Service (ai-service/):
+      • Searches ChromaDB Cloud (vector search)
+      • Finds "TypeScript Generics" article
+      • Uses GPT-4 to generate answer
+   4. Returns: "You learned about TypeScript Generics on Day 1..."
+
+CurioAI/
+├── desktop/                          # Desktop App (Standalone)
+│   ├── src/
+│   │   ├── local-ai-service/        # ← LOCAL AI (Ollama, local)
+│   │   │   └── src/
+│   │   │       ├── services/
+│   │   │       │   ├── summarizer.py    # Local Ollama
+│   │   │       │   ├── embedding.py     # sentence-transformers
+│   │   │       │   └── concept_extractor.py  # spaCy
+│   │   │
+│   │   └── main/
+│   │       └── storage/
+│   │           └── sqlite-db.js      # Local SQLite
+│   │
+│   └── package.json
+│
+├── backend/                          # Cloud Backend (Web API)
+│   └── src/
+│       ├── controllers/
+│       ├── services/
+│       │   ├── auth.service.js       # User authentication
+│       │   └── openai.service.js     # Cloud LLM integration
+│       └── routes/
+│
+├── ai-service/                       # Cloud AI Service (Advanced)
+│   └── src/
+│       ├── agents/                   # Agentic AI
+│       ├── models/
+│       │   └── llm_handler.py        # GPT-4, Claude
+│       └── vectorstore/
+│           └── pinecone_client.py   # Cloud vector DB
+│
+├── database/                          # Database Schemas
+│   └── schemas/
+│       ├── postgresql/               # Cloud PostgreSQL
+│       └── mongodb/                  # Alternative
+│
+├── infrastructure/                    # Deployment
+│   ├── docker/
+│   │   └── docker-compose.yml        # Local dev
+│   └── kubernetes/                   # Production
+│
+└── website/                          # Web Dashboard
+    └── src/
+        └── pages/
+            └── Graph.tsx             # Graph visualization
+            
+            
+            User Action
+    │
+    ├─→ Desktop App Running?
+    │   │
+    │   ├─→ YES → Use Local AI Service (desktop/src/local-ai-service/)
+    │   │         • Fast, offline
+    │   │         • Privacy-first
+    │   │
+    │   └─→ NO → Use Cloud AI Service (ai-service/)
+    │             • Advanced features
+    │             • GPT-4, Claude
+    │
+    └─→ Web Dashboard?
+        │
+        └─→ YES → Use Cloud Backend (backend/)
+                  • Full API access
+                  • Multi-user support
