@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import useElectron from './hooks/useElectron';
+import useElectron from './hooks/useElectron.js';
 import useAppStore from './store/store.js';
 import Sidebar from './components/layout/Sidebar/Sidebar.jsx';
 import TitleBar from './components/layout/TitleBar/TitleBar.jsx';

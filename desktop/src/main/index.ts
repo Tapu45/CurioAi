@@ -17,8 +17,10 @@ import { closeGraph } from './storage/graph-client.js';
 
 
 // Keep a global reference of the window object
-let mainWindow = null;
-let tray = null;
+import { BrowserWindow } from 'electron';
+let mainWindow: BrowserWindow | null = null;
+import { Tray } from 'electron';
+let tray: Tray | null = null;
 
 // Initialize app
 async function initializeApp() {
@@ -134,7 +136,7 @@ app.on('before-quit', () => {
     logger.info('Application shutting down...');
 });
 
-app.on('will-quit', (event) => {
+app.on('will-quit', () => {
     // Stop tracking before quit
     stopTracking();
 

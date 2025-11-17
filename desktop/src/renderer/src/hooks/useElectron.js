@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
-import electronIPC from '../services/electron-ipc';
+import electronIPC from '../services/electron-ipc.js';  // ✅ Add .js extension
 
 export default function useElectron() {
-    // In case we want to memoize / extend later
     const api = useMemo(() => electronIPC, []);
     return api;
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import useAppStore from '@renderer/store/store';
 import useElectron from '@renderer/hooks/useElectron';
-import { Button } from '@renderer/components/common/Button/index.jsx';
+import  Button  from '@renderer/components/common/Button/index.jsx';
 
 export default function SettingsPage() {
     const electron = useElectron();

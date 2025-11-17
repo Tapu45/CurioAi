@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import useAppStore from '@renderer/store/store';
 import useElectron from '@renderer/hooks/useElectron';
-import { Button } from '../../components/common/Button/index.jsx';
+import  Button  from '../../components/common/Button/index.jsx';
 
 
 export default function MainPage() {
