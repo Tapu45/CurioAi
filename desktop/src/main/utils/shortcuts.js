@@ -116,6 +116,60 @@ function registerShortcuts() {
     });
     logger.info(`Shortcut ${exportDataKey} registered: ${exportDataRegistered}`);
 
+    // Open Search
+    const openSearchKey = 'CommandOrControl+K';
+    ensureUnregister(openSearchKey);
+    const openSearchRegistered = globalShortcut.register(openSearchKey, () => {
+        try {
+            const win = getMainWindow();
+            if (win && win.webContents) {
+                win.show();
+                win.focus();
+                win.webContents.send('shortcut:open-search');
+                logger.info('Open search requested via shortcut');
+            }
+        } catch (error) {
+            logger.error('Error opening search via shortcut:', error);
+        }
+    });
+    logger.info(`Shortcut ${openSearchKey} registered: ${openSearchRegistered}`);
+
+    // Open Chat
+    const openChatKey = 'CommandOrControl+Shift+C';
+    ensureUnregister(openChatKey);
+    const openChatRegistered = globalShortcut.register(openChatKey, () => {
+        try {
+            const win = getMainWindow();
+            if (win && win.webContents) {
+                win.show();
+                win.focus();
+                win.webContents.send('shortcut:open-chat');
+                logger.info('Open chat requested via shortcut');
+            }
+        } catch (error) {
+            logger.error('Error opening chat via shortcut:', error);
+        }
+    });
+    logger.info(`Shortcut ${openChatKey} registered: ${openChatRegistered}`);
+
+    // Open Graph
+    const openGraphKey = 'CommandOrControl+Shift+G';
+    ensureUnregister(openGraphKey);
+    const openGraphRegistered = globalShortcut.register(openGraphKey, () => {
+        try {
+            const win = getMainWindow();
+            if (win && win.webContents) {
+                win.show();
+                win.focus();
+                win.webContents.send('shortcut:open-graph');
+                logger.info('Open graph requested via shortcut');
+            }
+        } catch (error) {
+            logger.error('Error opening graph via shortcut:', error);
+        }
+    });
+    logger.info(`Shortcut ${openGraphKey} registered: ${openGraphRegistered}`);
+
     logger.info('Shortcuts registered');
 }
 

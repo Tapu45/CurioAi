@@ -5,9 +5,10 @@ import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger.js';
 import { app } from 'electron';
-import { activities, summaries, embeddings } from './schema.js';
+import { activities, summaries, embeddings, files, fileChunks } from './schema.js';
 
 let db = null;
+let dbClient = null; // Add this to store the client
 const DB_PATH = path.join(app.getPath('userData'), 'data', 'sqlite', 'curioai.db');
 const DB_URL = `file:${DB_PATH}`;
 
@@ -88,6 +89,52 @@ async function createTables(client) {
         )
     `);
 
+    // Files table
+    await client.execute(`
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            mime_type TEXT,
+            size INTEGER,
+            hash TEXT,
+            extracted_text TEXT,
+            metadata TEXT,
+            processed_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // File chunks table
+    await client.execute(`
+        CREATE TABLE IF NOT EXISTS file_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            embedding TEXT,
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+        )
+    `);
+
+    // Indexes for files
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_files_type ON files(type);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_files_processed_at ON files(processed_at);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_file_chunks_file_id ON file_chunks(file_id);
+    `);
+
     // Indexes for graph tables
     await client.execute(`
         CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label);
@@ -127,6 +174,8 @@ async function initializeDatabase() {
             url: DB_URL,
         });
 
+        dbClient = client; // Store the client
+
         // NEW: ensure schema exists
         await createTables(client);
 
@@ -148,6 +197,13 @@ function getDatabase() {
         throw new Error('Database not initialized. Call initializeDatabase() first.');
     }
     return db;
+}
+
+function getDatabaseClient() {
+    if (!dbClient) {
+        throw new Error('Database not initialized. Call initializeDatabase() first.');
+    }
+    return dbClient;
 }
 
 // Activity operations
@@ -390,9 +446,178 @@ async function insertSummaryWithAI(summary, aiResult) {
     }
 }
 
+// Get all activities (for export)
+async function getAllActivities() {
+    try {
+        const results = await db.select().from(activities).orderBy(sql`${activities.timestamp} DESC`);
+        return results.map(row => ({
+            id: row.id,
+            url: row.url,
+            title: row.title,
+            content: row.content,
+            timestamp: row.timestamp,
+            source_type: row.sourceType,
+            app_name: row.appName,
+            window_title: row.windowTitle,
+        }));
+    } catch (error) {
+        logger.error('Error getting all activities:', error);
+        throw error;
+    }
+}
+
+// Get all summaries (for export)
+async function getAllSummaries() {
+    try {
+        const results = await db.select().from(summaries).orderBy(sql`${summaries.id} DESC`);
+        return results.map(row => ({
+            id: row.id,
+            activity_id: row.activityId,
+            summary_text: row.summaryText,
+            key_concepts: row.keyConcepts ? JSON.parse(row.keyConcepts) : [],
+            complexity: row.complexity,
+            sentiment: row.sentiment,
+        }));
+    } catch (error) {
+        logger.error('Error getting all summaries:', error);
+        throw error;
+    }
+}
+
+// Clear all data
+async function clearAllData() {
+    try {
+        const client = db.client;
+        // Delete in order to respect foreign keys
+        await client.execute(`DELETE FROM embeddings`);
+        await client.execute(`DELETE FROM summaries`);
+        await client.execute(`DELETE FROM activities`);
+        logger.info('All data cleared from database');
+        return { success: true };
+    } catch (error) {
+        logger.error('Error clearing all data:', error);
+        throw error;
+    }
+}
+
+// File operations
+async function insertFile(fileData) {
+    try {
+        const [row] = await db
+            .insert(files)
+            .values({
+                path: fileData.path,
+                name: fileData.name,
+                type: fileData.type,
+                mimeType: fileData.mimeType || null,
+                size: fileData.size || null,
+                hash: fileData.hash || null,
+                extractedText: fileData.extractedText || null,
+                metadata: fileData.metadata ? JSON.stringify(fileData.metadata) : null,
+                processedAt: fileData.processedAt || new Date().toISOString(),
+            })
+            .returning({ id: files.id });
+        return row.id;
+    } catch (error) {
+        logger.error('Error inserting file:', error);
+        throw error;
+    }
+}
+
+async function getFileByPath(filePath) {
+    try {
+        const [row] = await db
+            .select()
+            .from(files)
+            .where(sql`${files.path} = ${filePath}`)
+            .limit(1);
+        return row || null;
+    } catch (error) {
+        logger.error('Error getting file by path:', error);
+        return null;
+    }
+}
+
+async function getFileByHash(hash) {
+    try {
+        const [row] = await db
+            .select()
+            .from(files)
+            .where(sql`${files.hash} = ${hash}`)
+            .limit(1);
+        return row || null;
+    } catch (error) {
+        logger.error('Error getting file by hash:', error);
+        return null;
+    }
+}
+
+async function getFileById(id) {
+    try {
+        const [row] = await db
+            .select()
+            .from(files)
+            .where(sql`${files.id} = ${id}`)
+            .limit(1);
+        return row || null;
+    } catch (error) {
+        logger.error('Error getting file by id:', error);
+        return null;
+    }
+}
+
+async function getAllFiles(limit = 100, offset = 0) {
+    try {
+        const results = await db
+            .select()
+            .from(files)
+            .orderBy(sql`${files.createdAt} DESC`)
+            .limit(limit)
+            .offset(offset);
+        return results;
+    } catch (error) {
+        logger.error('Error getting all files:', error);
+        return [];
+    }
+}
+
+async function insertFileChunk(chunkData) {
+    try {
+        const [row] = await db
+            .insert(fileChunks)
+            .values({
+                fileId: chunkData.fileId,
+                chunkIndex: chunkData.chunkIndex,
+                content: chunkData.content,
+                embedding: chunkData.embedding ? JSON.stringify(chunkData.embedding) : null,
+                metadata: chunkData.metadata ? JSON.stringify(chunkData.metadata) : null,
+            })
+            .returning({ id: fileChunks.id });
+        return row.id;
+    } catch (error) {
+        logger.error('Error inserting file chunk:', error);
+        throw error;
+    }
+}
+
+async function getFileChunks(fileId) {
+    try {
+        const results = await db
+            .select()
+            .from(fileChunks)
+            .where(sql`${fileChunks.fileId} = ${fileId}`)
+            .orderBy(fileChunks.chunkIndex);
+        return results;
+    } catch (error) {
+        logger.error('Error getting file chunks:', error);
+        return [];
+    }
+}
+
 export {
     initializeDatabase,
     getDatabase,
+    getDatabaseClient,
     insertActivity,
     getActivities,
     getActivityById,
@@ -405,4 +630,14 @@ export {
     closeDatabase,
     insertSummaryWithAI,
     updateActivity, // NEW
+    getAllActivities,
+    getAllSummaries,
+    clearAllData,
+    insertFile,
+    getFileByPath,
+    getFileByHash,
+    getFileById,
+    getAllFiles,
+    insertFileChunk,
+    getFileChunks,
 };

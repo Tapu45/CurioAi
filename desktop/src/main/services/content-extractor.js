@@ -105,7 +105,7 @@ async function extractContent(activity) {
 
         return activity;
     } catch (error) {
-        logger.error('Error extracting content:', error);
+        logger.error('Error extracting content:', error instanceof Error ? error : new Error(String(error)));
         // Return activity as-is if extraction fails
         return activity;
     }

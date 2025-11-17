@@ -46,5 +46,38 @@ export const CHANNELS = {
         DISABLE: 'sync:disable',
         SYNC_NOW: 'sync:now',
     },
+
+    // Search & Chat
+    SEARCH: {
+        SEMANTIC_SEARCH: 'search:semantic',
+        CHECK_AI_SERVICE: 'search:check-ai-service',
+    },
+    CHAT: {
+        SEND_MESSAGE: 'chat:send-message',
+        GET_HISTORY: 'chat:get-history',
+    },
+
+    // File operations
+    FILE: {
+        INDEX: 'file:index',
+        INDEX_BATCH: 'file:index-batch',
+        GET_ALL: 'file:get-all',
+        GET_BY_ID: 'file:get-by-id',
+        GET_BY_PATH: 'file:get-by-path',
+        GET_CHUNKS: 'file:get-chunks',
+        DELETE: 'file:delete',
+        WATCHER_STATUS: 'file:watcher-status',
+        SEARCH: 'file:search',
+    },
+    
+    // Model management
+    MODEL: {
+        GET_RESOURCES: 'model:get-resources',
+        GET_RECOMMENDED_TIER: 'model:get-recommended-tier',
+        GET_CURRENT: 'model:get-current',
+        SET_TIER: 'model:set-tier',
+        AUTO_SELECT: 'model:auto-select',
+        GET_AVAILABLE: 'model:get-available',
+    },
 };
 

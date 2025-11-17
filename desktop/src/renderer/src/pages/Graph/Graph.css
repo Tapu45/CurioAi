@@ -1,0 +1,227 @@
+.graph-page {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 4);
+  height: 100%;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: calc(var(--spacing) * 2);
+}
+
+.graph-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--foreground);
+  margin: 0 0 calc(var(--spacing) * 1) 0;
+}
+
+.graph-subtitle {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  margin: 0;
+}
+
+.graph-stats {
+  display: flex;
+  gap: calc(var(--spacing) * 4);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--spacing) * 0.5);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.graph-controls {
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: calc(var(--spacing) * 4);
+  align-items: end;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 2);
+}
+
+.control-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.control-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1.5);
+}
+
+.control-checkbox {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.control-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.control-input {
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  width: 100%;
+  max-width: 120px;
+}
+
+.control-input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px oklch(from var(--ring) l c h / 0.2);
+}
+
+.graph-visualization-container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.graph-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 600px;
+}
+
+.graph-loading,
+.graph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--spacing) * 12);
+  text-align: center;
+  height: 100%;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: calc(var(--spacing) * 4);
+  opacity: 0.5;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--foreground);
+  margin: 0 0 calc(var(--spacing) * 2) 0;
+}
+
+.empty-description {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  margin: 0;
+  max-width: 400px;
+}
+
+.graph-legend {
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.legend-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: calc(var(--spacing) * 3);
+}
+
+.legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--spacing) * 4);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.concept-color {
+  background: var(--chart-2);
+}
+
+.activity-color {
+  background: var(--chart-1);
+}
+
+.topic-color {
+  background: var(--chart-3);
+}
+
+.legend-line {
+  width: 24px;
+  height: 2px;
+  flex-shrink: 0;
+}
+
+.learned-from {
+  background: var(--primary);
+}
+
+.related-to {
+  background: var(--accent);
+}

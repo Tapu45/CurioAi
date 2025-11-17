@@ -1,6 +1,6 @@
 import activeWin from 'active-win';
 import { BrowserWindow } from 'electron';
-import { insertActivity } from '../storage/sqlite-db.js';
+import { insertActivity, updateActivity } from '../storage/sqlite-db.js';
 import { getWhitelist, getAppConfig, getPrivacyConfig } from '../utils/config-manager.js';
 import { isLearningActivity, classifyActivity } from '../filters/activity-classifier.js';
 import { checkWhitelist } from '../filters/whitelist-manager.js';

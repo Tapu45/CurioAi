@@ -60,3 +60,31 @@ export const graphEdges = sqliteTable('graph_edges', {
     createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
 });
 
+export const files = sqliteTable('files', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    path: text('path').notNull().unique(),
+    name: text('name').notNull(),
+    type: text('type').notNull(), // 'pdf', 'docx', 'image', 'code', etc.
+    mimeType: text('mime_type'),
+    size: integer('size'),
+    hash: text('hash'), // SHA-256 for deduplication
+    extractedText: text('extracted_text'),
+    metadata: text('metadata'), // JSON string
+    processedAt: text('processed_at'),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+});
+
+// File chunks table
+export const fileChunks = sqliteTable('file_chunks', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    fileId: integer('file_id').notNull().references(() => files.id, {
+        onDelete: 'cascade',
+    }),
+    chunkIndex: integer('chunk_index').notNull(),
+    content: text('content').notNull(),
+    embedding: text('embedding'), // JSON string array
+    metadata: text('metadata'), // JSON string
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+});
+

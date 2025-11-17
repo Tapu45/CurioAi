@@ -106,10 +106,61 @@ async function processContent(content, options = {}) {
     }
 }
 
+// RAG-based chat
+async function chatWithRAG(query, context = []) {
+    try {
+        const url = getAIServiceURL();
+
+        // Format context for API
+        const formattedContext = context.map(item => ({
+            title: item.title || 'Untitled',
+            content: item.content || '',
+        }));
+
+        const response = await axios.post(
+            `${url}/api/v1/chat`,
+            {
+                query,
+                context: formattedContext,
+            },
+            { timeout: 60000 } // 60 second timeout for chat
+        );
+
+        return response.data;
+    } catch (error) {
+        logger.error('Error in RAG chat:', error);
+
+        // If chat endpoint doesn't exist, fallback to summarization
+        if (error.response?.status === 404) {
+            logger.warn('Chat endpoint not found, using fallback');
+            try {
+                // Build context text manually
+                const contextText = context
+                    .map((item, idx) => `[Source ${idx + 1}: ${item.title}]\n${item.content}`)
+                    .join('\n\n');
+
+                const prompt = `Based on the following context, answer this question: ${query}\n\nContext:\n${contextText}`;
+
+                const summaryResult = await summarizeContent(prompt, { maxLength: 500 });
+                return {
+                    answer: summaryResult.summary || 'I encountered an error generating a response.',
+                    sources_used: context.length,
+                };
+            } catch (fallbackError) {
+                logger.error('Fallback chat also failed:', fallbackError);
+                throw new Error(`Failed to get chat response: ${error.message}`);
+            }
+        }
+
+        throw new Error(`Failed to get chat response: ${error.message}`);
+    }
+}
+
 export {
     checkServiceHealth,
     summarizeContent,
     generateEmbedding,
     extractConcepts,
     processContent,
+    chatWithRAG, // Add this
 };

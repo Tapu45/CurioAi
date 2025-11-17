@@ -1,4 +1,4 @@
-import { ChromaClient } from 'chromadb';
+import { ChromaClient, PersistentClient } from 'chromadb';
 import path from 'path';
 import { app } from 'electron';
 import logger from '../utils/logger.js';
@@ -12,16 +12,23 @@ function initializeChromaDB() {
     try {
         const chromaPath = path.join(app.getPath('userData'), 'data', 'chromadb');
 
-        // ChromaDB can run in-memory or with persistent storage
-        // For Electron, we'll use persistent storage
-        client = new ChromaClient({
-            path: chromaPath,
-        });
+        // For Electron, use PersistentClient for local file storage
+        try {
+            client = new PersistentClient({
+                path: chromaPath,
+            });
+            logger.info('ChromaDB persistent client initialized at:', chromaPath);
+        } catch (persistentError) {
+            // Fallback: Use in-memory client (no server connection)
+            logger.warn('PersistentClient not available, using in-memory client:', persistentError.message);
+            client = new ChromaClient({
+                is_persistent: false,
+            });
+        }
 
-        logger.info('ChromaDB client initialized at:', chromaPath);
         return client;
     } catch (error) {
-        logger.error('Failed to initialize ChromaDB:', error);
+        logger.error('Failed to initialize ChromaDB:', error instanceof Error ? error : new Error(String(error)));
         throw error;
     }
 }
@@ -47,7 +54,7 @@ async function getCollection() {
             });
             logger.info('ChromaDB collection created');
         } catch (createError) {
-            logger.error('Failed to create ChromaDB collection:', createError);
+            logger.error('Failed to create ChromaDB collection:', createError instanceof Error ? createError : new Error(String(createError)));
             throw createError;
         }
     }
@@ -80,7 +87,7 @@ async function storeEmbedding(embeddingData) {
         logger.info(`Embedding stored in ChromaDB: ${id}`);
         return true;
     } catch (error) {
-        logger.error('Error storing embedding in ChromaDB:', error);
+        logger.error('Error storing embedding in ChromaDB:', error instanceof Error ? error : new Error(String(error)));
         throw error;
     }
 }
@@ -187,6 +194,23 @@ async function countEmbeddings() {
     }
 }
 
+// Clear all data from ChromaDB collection
+async function clearCollection() {
+    try {
+        const coll = await getCollection();
+        // Get all IDs first
+        const results = await coll.get();
+        if (results.ids.length > 0) {
+            await coll.delete({ ids: results.ids });
+        }
+        logger.info('ChromaDB collection cleared');
+        return { success: true };
+    } catch (error) {
+        logger.error('Error clearing ChromaDB collection:', error);
+        throw error;
+    }
+}
+
 // Close ChromaDB connection
 function closeChromaDB() {
     // ChromaDB client doesn't need explicit closing in this implementation
@@ -205,4 +229,5 @@ export {
     getAllEmbeddings,
     countEmbeddings,
     closeChromaDB,
+    clearCollection,
 };

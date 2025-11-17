@@ -21,9 +21,26 @@ const LEVELS = {
 // Format log message
 function formatMessage(level, message, ...args) {
     const timestamp = new Date().toISOString();
-    const argsStr = args.length > 0 ? ' ' + args.map(arg =>
-        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-    ).join(' ') : '';
+    const argsStr = args.length > 0 ? ' ' + args.map(arg => {
+        // Handle Error objects specially
+        if (arg instanceof Error) {
+            return JSON.stringify({
+                message: arg.message,
+                stack: arg.stack,
+                name: arg.name,
+                ...(arg.cause && { cause: arg.cause }),
+            }, null, 2);
+        }
+        // Handle other objects
+        if (typeof arg === 'object' && arg !== null) {
+            try {
+                return JSON.stringify(arg, null, 2);
+            } catch (e) {
+                return String(arg);
+            }
+        }
+        return String(arg);
+    }).join(' ') : '';
     return `[${timestamp}] [${level}] ${message}${argsStr}\n`;
 }
 

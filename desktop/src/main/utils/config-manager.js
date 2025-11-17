@@ -33,11 +33,22 @@ const DEFAULT_WHITELIST = {
 };
 
 const DEFAULT_APP_CONFIG = {
-    trackingInterval: 60000, // 60 seconds
-    storageLimit: 1073741824, // 1GB
+    trackingInterval: 60000,
+    storageLimit: 1073741824,
     aiModel: 'mistral',
-    graphUpdateInterval: 1800000, // 30 minutes
+    graphUpdateInterval: 1800000,
     enableSync: false,
+    // Add file watching config
+    fileWatchPaths: null, // null = use defaults
+    fileWatchIgnored: null, // null = use defaults
+    watchCodeFiles: true,
+    fileIndexingEnabled: true,
+    // Model configuration
+    modelTier: null, // null = auto-detect
+    llmModel: null, // null = use tier default
+    embeddingModel: null, // null = use tier default
+    nlpModel: null, // null = use tier default
+    autoSelectModel: true, // Auto-select on first run
 };
 
 const DEFAULT_PRIVACY_CONFIG = {

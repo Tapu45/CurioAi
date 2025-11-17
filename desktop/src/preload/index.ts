@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getActivities: (filters) => ipcRenderer.invoke('db:get-activities', filters),
     getSummary: (activityId) => ipcRenderer.invoke('db:get-summary', activityId),
     deleteActivity: (activityId) => ipcRenderer.invoke('db:delete-activity', activityId),
+    exportData: (format) => ipcRenderer.invoke('db:export-data', format),
+    clearAllData: () => ipcRenderer.invoke('db:clear-data'),
+    getStorageUsage: () => ipcRenderer.invoke('db:get-storage-usage'),
 
     // Event listeners
     onActivityUpdate: (callback) => {
@@ -26,6 +29,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onStatusChange: (callback) => {
         ipcRenderer.on('activity:status-change', (event, status) => callback(status));
+    },
+
+    // Shortcut event listeners
+    on: (channel, callback) => {
+        const validChannels = [
+            'shortcut:open-search',
+            'shortcut:open-chat',
+            'shortcut:open-graph',
+            'menu:open-preferences',
+            'menu:export-data',
+        ];
+        if (validChannels.includes(channel)) {
+            ipcRenderer.on(channel, (event, ...args) => callback(...args));
+        }
     },
 
     // Remove listeners
@@ -40,4 +57,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     buildGraph: () => ipcRenderer.invoke('graph:build'),
     getGraphStats: () => ipcRenderer.invoke('graph:get-stats'),
     getVisualizationData: (options) => ipcRenderer.invoke('graph:get-visualization', options),
+
+    // Search channels
+    semanticSearch: (query, options) => ipcRenderer.invoke('search:semantic', query, options),
+    checkAIService: () => ipcRenderer.invoke('search:check-ai-service'),
+
+    // Chat channels
+    sendChatMessage: (message) => ipcRenderer.invoke('chat:send-message', message),
+    getChatHistory: (limit) => ipcRenderer.invoke('chat:get-history', limit),
+
 });

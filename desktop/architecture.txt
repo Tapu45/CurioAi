@@ -1,0 +1,410 @@
+CurioAI Desktop Application - Architecture Guide
+Table of Contents
+What is Electron?
+Application Architecture Overview
+Core Technologies
+System Architecture
+Data Flow
+Key Components Explained
+What is Electron?
+Electron lets you build desktop apps with web technologies (HTML, CSS, JavaScript/React). It combines:
+Chromium (browser engine) - renders your UI
+Node.js - runs JavaScript on your computer
+Think of it as: Chrome browser + Node.js = Desktop App
+Why Electron?
+Write once, run on Windows, macOS, Linux
+Use familiar web technologies (React, HTML, CSS)
+Access to system APIs (file system, notifications, etc.)
+Application Architecture Overview
+Your app has 3 main processes:
+┌─────────────────────────────────────────────────────────────┐
+│                    ELECTRON APPLICATION                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────────┐      ┌──────────────────┐             │
+│  │  MAIN PROCESS    │◄────►│  RENDERER       │             │
+│  │  (Node.js)       │ IPC  │  (React UI)     │             │
+│  │                  │      │  (Chromium)     │             │
+│  │  - Activity      │      │  - Dashboard    │             │
+│  │    Tracking      │      │  - History      │             │
+│  │  - Database      │      │  - Chat         │             │
+│  │  - Services      │      │  - Graph View   │             │
+│  └──────────────────┘      └──────────────────┘             │
+│         │                              │                     │
+│         │                              │                     │
+│         ▼                              ▼                     │
+│  ┌──────────────────┐      ┌──────────────────┐             │
+│  │  PRELOAD SCRIPT │      │  PYTHON AI       │             │
+│  │  (Security)     │      │  SERVICE         │             │
+│  │                 │      │  (FastAPI)       │             │
+│  └──────────────────┘      └──────────────────┘             │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+
+Core Technologies
+1. Electron Framework
+Main Process (src/main/): Node.js backend
+Controls app lifecycle
+Manages windows, system tray
+Handles file system, databases
+Runs background services
+Renderer Process (src/renderer/): React frontend
+UI (Dashboard, History, Chat, Graph)
+React components
+Cannot directly access Node.js APIs (security)
+Preload Script (src/preload/): Security bridge
+Exposes safe APIs to renderer
+Prevents direct Node.js access
+2. Python AI Service (src/local-ai-service/)
+FastAPI: Web framework
+Ollama: Local LLM (summarization, chat)
+sentence-transformers: Embeddings
+spaCy: Concept extraction (NER)
+3. Databases
+SQLite: Structured data (activities, summaries)
+ChromaDB: Vector embeddings (semantic search)
+Graphology + SQLite: Knowledge graph (nodes/edges)
+
+System Architecture
+Complete Architecture Diagram
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         USER'S COMPUTER                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                    ELECTRON MAIN PROCESS                            │   │
+│  │                    (Node.js - Full System Access)                   │   │
+│  ├─────────────────────────────────────────────────────────────────────┤   │
+│  │                                                                       │   │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
+│  │  │ Activity     │  │ Content     │  │ AI Service   │              │   │
+│  │  │ Tracker      │─►│ Extractor   │─►│ Client       │              │   │
+│  │  │ (active-win) │  │ (Puppeteer) │  │ (axios)      │              │   │
+│  │  └──────────────┘  └──────────────┘  └──────┬───────┘              │   │
+│  │         │                │                    │                       │   │
+│  │         │                │                    ▼                       │   │
+│  │         │                │          ┌─────────────────────┐          │   │
+│  │         │                │          │  Python AI Service  │          │   │
+│  │         │                │          │  (FastAPI :8000)    │          │   │
+│  │         │                │          ├─────────────────────┤          │   │
+│  │         │                │          │ • Ollama (LLM)      │          │   │
+│  │         │                │          │ • Embeddings        │          │   │
+│  │         │                │          │ • Concept Extract   │          │   │
+│  │         │                │          └─────────────────────┘          │   │
+│  │         │                │                    │                       │   │
+│  │         ▼                ▼                    │                       │   │
+│  │  ┌──────────────────────────────────────────────────────┐          │   │
+│  │  │              Database Service Layer                    │          │   │
+│  │  ├──────────────────────────────────────────────────────┤          │   │
+│  │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐           │          │   │
+│  │  │  │ SQLite   │  │ ChromaDB │  │ Graph    │           │          │   │
+│  │  │  │ (Tables) │  │ (Vectors)│  │ (Nodes)  │           │          │   │
+│  │  │  └──────────┘  └──────────┘  └──────────┘           │          │   │
+│  │  └──────────────────────────────────────────────────────┘          │   │
+│  │                                                                       │   │
+│  │  ┌──────────────────────────────────────────────────────┐          │   │
+│  │  │              IPC Handlers                             │          │   │
+│  │  │  (activity:*, db:*, graph:*, chat:*, search:*)      │          │   │
+│  │  └──────────────────────────────────────────────────────┘          │   │
+│  │                                                                       │   │
+│  │  ┌──────────────────────────────────────────────────────┐          │   │
+│  │  │              Graph Builder & Scheduler                │          │   │
+│  │  │  (Builds relationships every 30 min)                  │          │   │
+│  │  └──────────────────────────────────────────────────────┘          │   │
+│  │                                                                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              │                                               │
+│                              │ IPC (Inter-Process Communication)             │
+│                              │                                               │
+│                              ▼                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                    PRELOAD SCRIPT                                    │   │
+│  │                    (Security Bridge)                                │   │
+│  │  • Exposes safe APIs via contextBridge                              │   │
+│  │  • window.electronAPI = { getActivityStatus, ... }                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              │                                               │
+│                              │                                               │
+│                              ▼                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │              RENDERER PROCESS (React UI)                             │   │
+│  │              (Chromium - No Direct Node Access)                       │   │
+│  ├─────────────────────────────────────────────────────────────────────┤   │
+│  │                                                                       │   │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
+│  │  │  Dashboard   │  │  History     │  │  Chat        │              │   │
+│  │  │  (Main Page)  │  │  Page        │  │  Page        │              │   │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘              │   │
+│  │                                                                       │   │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
+│  │  │  Search      │  │  Graph       │  │  Settings    │              │   │
+│  │  │  Page        │  │  Page        │  │  Page        │              │   │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘              │   │
+│  │                                                                       │   │
+│  │  ┌──────────────────────────────────────────────────────┐          │   │
+│  │  │  Zustand Store (State Management)                     │          │   │
+│  │  │  • activityStatus, settings, graphStats              │          │   │
+│  │  └──────────────────────────────────────────────────────┘          │   │
+│  │                                                                       │   │
+│  │  ┌──────────────────────────────────────────────────────┐          │   │
+│  │  │  useElectron Hook                                     │          │   │
+│  │  │  • Wrapper around window.electronAPI                  │          │   │
+│  │  └──────────────────────────────────────────────────────┘          │   │
+│  │                                                                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Data Flow
+1. Activity Tracking Flow
+
+┌─────────────┐
+│  User Opens │
+│  Browser/App│
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Activity Tracker (Every 60 seconds)                         │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 1. active-win detects current window                 │  │
+│  │    • App name: "Chrome"                               │  │
+│  │    • Window title: "React Tutorial - YouTube"        │  │
+│  │    • URL: "https://youtube.com/watch?v=..."          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 2. Activity Classifier                                │  │
+│  │    • Check if app/domain is in whitelist             │  │
+│  │    • Classify: Learning vs Entertainment             │  │
+│  │    • Result: "Learning Activity" ✅                  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 3. Content Extractor                                  │  │
+│  │    • Browser: Puppeteer extracts page text            │  │
+│  │    • YouTube: Extract transcript                      │  │
+│  │    • PDF: pdf-parse extracts text                     │  │
+│  │    • Result: Cleaned text content                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 4. Save to SQLite (activities table)                   │  │
+│  │    • id, url, title, content, timestamp             │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 5. AI Processing (via Python Service)                 │  │
+│  │    HTTP POST http://127.0.0.1:8000/api/v1/process    │  │
+│  │    ├─► Summarize (Ollama)                            │  │
+│  │    ├─► Generate Embedding (sentence-transformers)    │  │
+│  │    └─► Extract Concepts (spaCy NER)                  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 6. Save Results                                       │  │
+│  │    • Summary → SQLite (summaries table)              │  │
+│  │    • Embedding → ChromaDB (vector store)             │  │
+│  │    • Concepts → Graph (nodes in graph_nodes table)   │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 7. Update UI (via IPC)                                │  │
+│  │    mainWindow.webContents.send('activity:update')   │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+2. Search & Chat Flow
+
+┌─────────────────────────────────────────────────────────────┐
+│  USER TYPES QUERY: "What did I learn about React?"          │
+└─────────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  React Component (SearchPage.jsx)                            │
+│  • User types in search box                                   │
+│  • Calls: electron.semanticSearch(query)                     │
+└─────────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  IPC Handler (handlers.js)                                    │
+│  • ipcMain.handle('search:semantic')                         │
+│  • Calls: searchService.semanticSearch()                     │
+└─────────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Search Service (search-service.js)                           │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 1. Generate embedding for query                       │  │
+│  │    • HTTP POST → Python AI Service                    │  │
+│  │    • Returns: [0.23, -0.45, 0.67, ...] (vector)       │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 2. Query ChromaDB                                      │  │
+│  │    • Find similar embeddings (cosine similarity)      │  │
+│  │    • Returns: Top 10 matching documents              │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 3. Enrich with SQLite data                            │  │
+│  │    • Get full activity details                        │  │
+│  │    • Get summaries                                     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 4. Return results to UI                                │  │
+│  │    • Display list of matching activities              │  │
+│  │    • Show similarity scores                            │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+FOR CHAT (RAG):
+┌─────────────────────────────────────────────────────────────┐
+│  Similar flow, but:                                          │
+│  1. Get relevant documents (like search)                    │
+│  2. Build context from documents                             │
+│  3. Send to Ollama with context:                             │
+│     "Based on this context: [docs], answer: [query]"        │
+│  4. Return answer + source citations                         │
+└─────────────────────────────────────────────────────────────┘
+
+3. Graph Building Flow
+┌─────────────────────────────────────────────────────────────┐
+│  Graph Scheduler (Every 30 minutes)                          │
+│  • node-cron triggers buildGraph()                           │
+└─────────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Graph Builder (graph-builder.js)                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 1. Get all embeddings from ChromaDB                    │  │
+│  │    • Each embedding represents a summary/activity       │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 2. Calculate Similarities                              │  │
+│  │    • Compare each embedding with others               │  │
+│  │    • Cosine similarity: 0.0 to 1.0                    │  │
+│  │    • If similarity > 0.7 → Create relationship       │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 3. Create Graph Nodes                                 │  │
+│  │    • Activity nodes (from activities table)           │  │
+│  │    • Concept nodes (from extracted concepts)          │  │
+│  │    • Topic nodes (clustered concepts)                 │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 4. Create Graph Edges                                 │  │
+│  │    • RELATED_TO: Concepts with similar embeddings     │  │
+│  │    • LEARNED_FROM: Activity → Concept                │  │
+│  │    • CONNECTS: Concepts in same topic                 │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 5. Save to Graph Store                                │  │
+│  │    • Nodes → graph_nodes table (SQLite)               │  │
+│  │    • Edges → graph_edges table (SQLite)               │  │
+│  │    • Also in-memory Graphology graph                   │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ 6. UI Updates                                          │  │
+│  │    • Graph visualization page shows new nodes/edges   │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+Key Components Explained
+1. Main Process (src/main/index.ts)
+Entry point: starts the app
+Initializes:
+SQLite, ChromaDB, Graph
+Python AI service
+Activity tracker
+IPC handlers
+Main window
+2. IPC Communication (Inter-Process Communication)
+Main ↔ Renderer communication
+Pattern:
+  // Renderer (React)  const status = await window.electronAPI.getActivityStatus();    // Preload (preload/index.ts)  getActivityStatus: () => ipcRenderer.invoke('activity:get-status')    // Main (handlers.js)  ipcMain.handle('activity:get-status', async () => {    return await getActivityStatus();  });
+3. Python AI Service
+Runs on http://127.0.0.1:8000
+Endpoints:
+/api/v1/summarize - Summarize text with Ollama
+/api/v1/embedding - Generate embeddings
+/api/v1/concepts - Extract concepts (NER)
+/api/v1/process - All-in-one processing
+/api/v1/chat - RAG-based chat
+4. Database Storage
+SQLite (sqlite-db.js):
+activities - Raw captured activities
+summaries - AI-generated summaries
+embeddings - Embedding metadata
+graph_nodes - Graph nodes
+graph_edges - Graph relationships
+ChromaDB (chromadb-client.js):
+Stores vector embeddings
+Enables semantic search
+Collection: knowledge_base
+Graph (graph-client.js):
+Graphology (in-memory graph)
+Persisted in SQLite
+Used for visualization
+5. React UI (src/renderer/)
+Pages:
+Main - Dashboard (today's stats)
+History - Activity history list
+Search - Semantic search
+Chat - RAG chat interface
+Graph - Knowledge graph visualization
+Settings - Configuration
+State: Zustand store
+IPC: useElectron() hook
+Technology Stack Summary
+Component	Technology	Purpose
+Desktop Framework	Electron	Desktop app wrapper
+Main Process	Node.js	Backend logic
+Frontend	React + TypeScript	UI
+State Management	Zustand	React state
+Styling	Tailwind CSS	Styling
+AI Service	Python FastAPI	Local AI processing
+LLM	Ollama	Local language model
+Embeddings	sentence-transformers	Vector embeddings
+NLP	spaCy	Concept extraction
+SQL Database	SQLite (via Drizzle ORM)	Structured data
+Vector DB	ChromaDB	Embedding storage
+Graph	Graphology + SQLite	Knowledge graph
+Content Extraction	Puppeteer, pdf-parse	Extract text from various sources
+Scheduling	node-cron	Periodic tasks
+How It All Works Together
+App starts → Main process initializes databases and services
+Background tracking → Every 60s, detects user activity
+Content extraction → Extracts text from browser/PDF/YouTube
+AI processing → Sends to Python service for summarization/embedding
+Storage → Saves to SQLite, ChromaDB, and graph
+Graph building → Every 30min, builds relationships between concepts
+UI interaction → User searches/chats → Semantic search in ChromaDB → Results displayed
+Visualization → Graph viewer shows knowledge connections
+This architecture is local-first: all data stays on your computer, and the AI runs locally via Ollama.
+I can create a visual diagram file or explain any specific part in more detail.

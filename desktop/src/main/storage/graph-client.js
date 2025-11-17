@@ -121,6 +121,14 @@ async function createNode(nodeData) {
 
         const graph = getGraph();
 
+        // Check if node already exists
+        if (graph.hasNode(nodeId)) {
+            logger.debug(`Node already exists: ${nodeId}, skipping creation`);
+            // Return existing node
+            const existingNode = graph.getNodeAttributes(nodeId);
+            return { properties: { id: nodeId, label, ...existingNode } };
+        }
+
         // Add to in-memory graph
         graph.addNode(nodeId, {
             label,
@@ -133,6 +141,13 @@ async function createNode(nodeData) {
         logger.info(`Node created: ${label} - ${properties.name || properties.id}`);
         return { properties: { id: nodeId, label, ...properties } };
     } catch (error) {
+        // If it's a "node already exists" error from graphology, handle gracefully
+        if (error.message && error.message.includes('already exist')) {
+            logger.debug(`Node already exists in graph: ${nodeData.properties.id}`);
+            const graph = getGraph();
+            const existingNode = graph.getNodeAttributes(nodeData.properties.id);
+            return { properties: { id: nodeData.properties.id, label: nodeData.label, ...existingNode } };
+        }
         logger.error('Error creating node:', error);
         throw error;
     }
@@ -423,6 +438,65 @@ async function queryGraph(queryType, parameters = {}) {
             return results;
         }
 
+        if (queryType === 'MATCH_TOPICS_WITH_CONCEPTS') {
+            const results = [];
+            graph.forEachNode((nodeId, attrs) => {
+                if (attrs.label === 'Topic') {
+                    const neighbors = graph.neighbors(nodeId);
+                    const concepts = [];
+                    for (const neighborId of neighbors) {
+                        const edge = graph.getEdgeAttributes(
+                            graph.edge(nodeId, neighborId) || graph.edge(neighborId, nodeId)
+                        );
+                        if (edge.type === 'CONTAINS') {
+                            const neighborData = graph.getNodeAttributes(neighborId);
+                            if (neighborData.name) {
+                                concepts.push(neighborData.name);
+                            }
+                        }
+                    }
+                    results.push({
+                        topicId: nodeId,
+                        topicName: attrs.name || `Topic ${nodeId}`,
+                        concepts,
+                    });
+                }
+            });
+            return results;
+        }
+
+        if (queryType === 'MATCH_ACTIVITIES_FOR_CONCEPT') {
+            const { conceptId } = parameters;
+            const results = [];
+
+            if (graph.hasNode(conceptId)) {
+                const neighbors = graph.neighbors(conceptId);
+                for (const neighborId of neighbors) {
+                    const edge = graph.getEdgeAttributes(
+                        graph.edge(conceptId, neighborId) || graph.edge(neighborId, conceptId)
+                    );
+                    if (edge.type === 'LEARNED_FROM') {
+                        const neighborData = graph.getNodeAttributes(neighborId);
+                        if (neighborData.label === 'Activity') {
+                            results.push({
+                                a: {
+                                    properties: {
+                                        id: neighborId,
+                                        title: neighborData.title || neighborData.name,
+                                        source_type: neighborData.source_type,
+                                        timestamp: neighborData.timestamp,
+                                        ...neighborData,
+                                    },
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
         return [];
     } catch (error) {
         logger.error('Error querying graph:', error);
@@ -456,6 +530,26 @@ async function getGraphStats() {
     }
 }
 
+// Clear all graph data
+async function clearGraph() {
+    try {
+        if (!graph) {
+            await initializeGraph();
+        }
+        // Clear all nodes and edges
+        graph.clear();
+        // Also clear from SQLite if you're persisting there
+        const client = getDatabase().client;
+        await client.execute(`DELETE FROM graph_edges`);
+        await client.execute(`DELETE FROM graph_nodes`);
+        logger.info('Graph cleared');
+        return { success: true };
+    } catch (error) {
+        logger.error('Error clearing graph:', error);
+        throw error;
+    }
+}
+
 // Close graph (save any pending changes)
 async function closeGraph() {
     try {
@@ -480,4 +574,5 @@ export {
     queryGraph,
     getGraphStats,
     closeGraph,
+    clearGraph,
 };

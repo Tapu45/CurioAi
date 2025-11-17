@@ -18,6 +18,9 @@ const useAppStore = create((set) => ({
     // UI
     currentPage: 'main', // 'main' | 'settings' | 'history' | 'graph'
     setCurrentPage: (page) => set({ currentPage: page }),
+
+    currentPage: 'main', // 'main' | 'settings' | 'history' | 'search' | 'chat' | 'graph'
+    setCurrentPage: (page) => set({ currentPage: page }),
 }));
 
 export default useAppStore;

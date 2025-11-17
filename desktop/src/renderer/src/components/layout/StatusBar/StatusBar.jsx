@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import useAppStore from '../../../store/store.js';
 import useElectron from '../../../hooks/useElectron.js';
+import './Statusbar.css';
 
 export default function StatusBar() {
     const electron = useElectron();
@@ -25,42 +27,105 @@ export default function StatusBar() {
     }, [electron, setActivityStatus]);
 
     const status = activityStatus;
-    const statusText = !status
-        ? 'Connecting…'
-        : status.isPaused
-            ? 'Paused'
-            : status.isTracking
-                ? 'Tracking'
-                : 'Idle';
 
-    const statusColor = !status
-        ? '#fbbf24'
-        : status.isPaused
-            ? '#f97316'
-            : status.isTracking
-                ? '#22c55e'
-                : '#9ca3af';
+    const getStatusConfig = () => {
+        if (!status) {
+            return {
+                text: 'Connecting…',
+                color: 'var(--status-connecting)',
+                icon: '⏳',
+                variant: 'connecting'
+            };
+        }
+        if (status.isPaused) {
+            return {
+                text: 'Paused',
+                color: 'var(--status-paused)',
+                icon: '⏸️',
+                variant: 'paused'
+            };
+        }
+        if (status.isTracking) {
+            return {
+                text: 'Tracking',
+                color: 'var(--status-tracking)',
+                icon: '🔴',
+                variant: 'tracking'
+            };
+        }
+        return {
+            text: 'Idle',
+            color: 'var(--status-idle)',
+            icon: '⭕',
+            variant: 'idle'
+        };
+    };
+
+    const statusConfig = getStatusConfig();
+    const timeString = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+    });
 
     return (
         <div className="status-bar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span
-                    style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: statusColor,
-                        boxShadow: `0 0 6px ${statusColor}`,
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="status-bar-left"
+            >
+                <motion.div
+                    className={`status-indicator status-indicator-${statusConfig.variant}`}
+                    animate={{
+                        boxShadow: statusConfig.variant === 'tracking'
+                            ? [
+                                `0 0 8px ${statusConfig.color}`,
+                                `0 0 16px ${statusConfig.color}`,
+                                `0 0 8px ${statusConfig.color}`
+                            ]
+                            : `0 0 0px ${statusConfig.color}`
+                    }}
+                    transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        repeatType: 'loop'
                     }}
                 />
-                <span>{statusText}</span>
+
+                <div className="status-info">
+                    <span className="status-icon">{statusConfig.icon}</span>
+                    <span className="status-text">{statusConfig.text}</span>
+                </div>
+
                 {status?.todayCount != null && (
-                    <span style={{ marginLeft: 8, fontSize: 11, color: '#9ca3af' }}>
-                        Today: {status.todayCount} captures
-                    </span>
+                    <motion.div
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="status-counter"
+                    >
+                        <span className="status-counter-label">Today:</span>
+                        <span className="status-counter-value">
+                            {status.todayCount}
+                        </span>
+                        <span className="status-counter-unit">captures</span>
+                    </motion.div>
                 )}
-            </div>
-            <div>{now.toLocaleTimeString()}</div>
+            </motion.div>
+
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="status-bar-right"
+            >
+                <div className="status-time">
+                    {timeString}
+                </div>
+            </motion.div>
         </div>
     );
 }

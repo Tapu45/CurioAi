@@ -20,6 +20,20 @@ const getAPI = () => {
         getActivities: async () => [],
         getSummary: async () => null,
         deleteActivity: async () => ({ success: false }),
+        exportData: async () => ({ success: false, canceled: true }),
+        clearAllData: async () => ({ success: false }),
+        getStorageUsage: async () => ({
+            sqlite: 0,
+            chromadb: 0,
+            graph: 0,
+            total: 0,
+            formatted: {
+                sqlite: '0 B',
+                chromadb: '0 B',
+                graph: '0 B',
+                total: '0 B',
+            },
+        }),
         // Graph
         getGraphData: async () => ({ nodes: [], edges: [] }),
         getRelatedConcepts: async () => [],
@@ -27,9 +41,16 @@ const getAPI = () => {
         buildGraph: async () => ({ success: false }),
         getGraphStats: async () => ({ nodes: {}, relationships: {} }),
         getVisualizationData: async () => ({ nodes: [], edges: [], topics: [], stats: {} }),
+        // Search
+        semanticSearch: async () => ({ results: [] }),
+        checkAIService: async () => false,
+        // Chat
+        sendChatMessage: async () => ({ answer: '', sources: [] }),
+        getChatHistory: async () => [],
         // Events
         onActivityUpdate: () => { },
         onStatusChange: () => { },
+        on: () => { },
         removeAllListeners: () => { },
     };
 };

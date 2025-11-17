@@ -1,5 +1,5 @@
 import { insertActivity, insertSummary, insertEmbedding, getActivityById } from '../storage/sqlite-db.js';
-import { storeEmbedding, querySimilarEmbeddings } from '../storage/chromadb-client.js';
+import { storeEmbedding, querySimilarEmbeddings } from '../storage/lancedb-client.js';
 import { createNode, createRelationship, getRelatedNodes } from '../storage/graph-client.js';
 import logger from '../utils/logger.js';
 
@@ -23,7 +23,7 @@ async function storeActivityWithAI(activity, aiResult) {
             logger.info(`Summary stored in SQLite: ${summaryId}`);
         }
 
-        // 3. Store embedding in ChromaDB
+        // 3. Store embedding in LanceDB
         if (aiResult.embedding && summaryId) {
             try {
                 await storeEmbedding({
@@ -39,7 +39,7 @@ async function storeActivityWithAI(activity, aiResult) {
                         sentiment: aiResult.summary.sentiment,
                     },
                 });
-                logger.info(`Embedding stored in ChromaDB: ${summaryId}`);
+                logger.info(`Embedding stored in LanceDB: ${summaryId}`);
 
                 // Also store in SQLite for backup
                 await insertEmbedding({
@@ -48,7 +48,7 @@ async function storeActivityWithAI(activity, aiResult) {
                     model_version: aiResult.embedding.model,
                 });
             } catch (error) {
-                logger.error('Error storing embedding:', error);
+                logger.error('Error storing embedding:', error instanceof Error ? error : new Error(String(error)));
             }
         }
 
@@ -143,10 +143,17 @@ async function findSimilarActivities(activityId, limit = 5) {
             throw new Error(`Activity ${activityId} not found`);
         }
 
-        // Get embedding from ChromaDB
+        // Fetch embedding for the activity
+        const { getEmbeddingById } = await import('../storage/lancedb-client.js');
+        const embeddingRecord = await getEmbeddingById(`embedding_${activity.summary_id}`);
+        if (!embeddingRecord || !embeddingRecord.embedding) {
+            throw new Error(`Embedding for activity ${activityId} not found`);
+        }
+
+        // Get similar embeddings
         const embeddingData = await querySimilarEmbeddings(
-            null, // We'll need to get the embedding first
-            limit + 1, // +1 to exclude the query itself
+            embeddingRecord.embedding, // Pass the actual embedding
+            limit + 1,
             { activity_id: { $ne: activityId } }
         );
 

@@ -1,0 +1,6 @@
+1, memory manager langchain - Why is there: "For now, we'll use a simple buffer with manual summarization"?
+Full ConversationSummaryMemory needs an LLM (AI model) to automatically summarize conversations.
+Your code does not call an LLM for summarization yet (maybe for simplicity or performance).
+So, it just keeps the last 20 messages and lets you manually summarize if needed.
+
+2. streaming in routes.py

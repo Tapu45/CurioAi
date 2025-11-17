@@ -1,4 +1,4 @@
-import { querySimilarEmbeddings, getAllEmbeddings } from '../storage/chromadb-client.js';
+import { querySimilarEmbeddings, getAllEmbeddings } from '../storage/lancedb-client.js';
 import { getAppConfig } from '../utils/config-manager.js';
 import logger from '../utils/logger.js';
 import { createRelationship, queryGraph, getNodeById } from '../storage/graph-client.js';

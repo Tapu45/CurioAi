@@ -4,15 +4,17 @@ import { setupTray } from './windows/tray-manager.js';
 import { setupApplicationMenu } from './menu/application-menu.js';
 import { registerIpcHandlers } from './ipc/handlers.js';
 import { initializeDatabase } from './storage/sqlite-db.js';
-import { loadConfig } from './utils/config-manager.js';
+import { getAppConfig, loadConfig } from './utils/config-manager.js';
 import logger from './utils/logger.js';
 import { startTracking, stopTracking } from './services/activity-tracker.js';
-import { initializeChromaDB } from './storage/chromadb-client.js';
+import { initializeLanceDB } from './storage/lancedb-client.js';
 import { startGraphScheduler, stopGraphScheduler } from './services/graph-scheduler.js';
-import { closeChromaDB } from './storage/chromadb-client.js';
+import { closeLanceDB } from './storage/lancedb-client.js';
 import { startAIService, stopAIService } from './services/ai-services-manager.js';
 import { initializeGraph, checkConnection as checkGraphConnection } from './storage/graph-client.js';
 import { closeGraph } from './storage/graph-client.js';
+import { registerShortcuts, unregisterShortcuts } from './utils/shortcuts.js';
+import { startFileWatcher, stopFileWatcher } from './services/file-watcher.js';
 
 
 
@@ -37,11 +39,11 @@ async function initializeApp() {
 
         // Initialize ChromaDB
         try {
-            initializeChromaDB();
-            logger.info('ChromaDB initialized');
+            initializeLanceDB();
+            logger.info('LanceDB initialized');
         } catch (error) {
             logger.warn(
-                'ChromaDB initialization failed:',
+                'LanceDB initialization failed:',
                 error instanceof Error ? error.message : String(error)
             );
         }
@@ -60,6 +62,20 @@ async function initializeApp() {
             );
         }
 
+        try {
+            const { getModelManager } = await import('./services/model-manager.js');
+            const modelManager = await getModelManager();
+
+            // Auto-select tier if enabled and not set
+            const config = getAppConfig();
+            if (config.autoSelectModel && !config.modelTier) {
+                await modelManager.autoSelectTier();
+                logger.info('Model tier auto-selected based on system resources');
+            }
+        } catch (error) {
+            logger.warn('Model manager initialization failed:', error instanceof Error ? error.message : String(error));
+        }
+
         // Initialize Graph (graphology + SQLite)
         try {
             await initializeGraph();
@@ -74,6 +90,25 @@ async function initializeApp() {
                 'Graph initialization failed:',
                 error instanceof Error ? error.message : String(error)
             );
+        }
+
+        // Initialize chat history table
+        try {
+            const { ensureChatHistoryTable } = await import('./storage/chat-history.js');
+            await ensureChatHistoryTable();
+            logger.info('Chat history table initialized');
+        } catch (error) {
+            logger.warn('Failed to initialize chat history table:', error);
+        }
+
+        try {
+            const config = getAppConfig();
+            if (config.fileIndexingEnabled !== false) {
+                startFileWatcher();
+                logger.info('File watcher started');
+            }
+        } catch (error) {
+            logger.warn('File watcher initialization failed:', error instanceof Error ? error.message : String(error));
         }
 
         // Register IPC handlers
@@ -91,6 +126,9 @@ async function initializeApp() {
         // Setup application menu
         setupApplicationMenu();
         logger.info('Application menu setup complete');
+
+        registerShortcuts();
+        logger.info('Keyboard shortcuts registered');
 
 
         // Start activity tracking
@@ -140,14 +178,19 @@ app.on('will-quit', () => {
     // Stop tracking before quit
     stopTracking();
 
+    // Unregister shortcuts
+    unregisterShortcuts();
+
     // Stop graph scheduler
     stopGraphScheduler();
 
     // Stop AI service
     stopAIService();
 
-    closeChromaDB();
+    closeLanceDB();
     closeGraph();
+
+    stopFileWatcher();
 
     logger.info('Application quit');
 });
