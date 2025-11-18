@@ -1,0 +1,88 @@
+.sync-toggle {
+    display: flex;
+    align-items: center;
+}
+
+.sync-toggle-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    cursor: pointer;
+}
+
+.sync-toggle-text {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--foreground);
+}
+
+.sync-toggle-icon {
+    color: var(--muted-foreground);
+    transition: color 0.2s ease;
+}
+
+.sync-toggle-icon.active {
+    color: var(--primary);
+}
+
+.sync-toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    background: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.sync-toggle-switch:hover:not(:disabled) {
+    border-color: var(--ring);
+}
+
+.sync-toggle-switch.enabled {
+    background: var(--primary);
+    border-color: var(--primary);
+    justify-content: flex-end;
+}
+
+.sync-toggle-slider {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--background);
+    margin: 0 2px;
+    transition: all 0.2s ease;
+}
+
+.sync-toggle-switch.enabled .sync-toggle-slider {
+    background: var(--primary-foreground);
+}
+
+.sync-toggle-switch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sync-toggle-loader {
+    animation: spin 1s linear infinite;
+    color: var(--foreground);
+    margin: 0 2px;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}

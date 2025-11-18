@@ -6,6 +6,7 @@ import fs from 'fs';
 import logger from '../utils/logger.js';
 import { app } from 'electron';
 import { activities, summaries, embeddings, files, fileChunks } from './schema.js';
+import { createSyncTables } from './sync-schema.js';
 
 let db = null;
 let dbClient = null; // Add this to store the client
@@ -163,6 +164,8 @@ async function createTables(client) {
     `);
 
     logger.info('Database tables ensured');
+    
+    await createSyncTables();
 }
 
 // Initialize database
@@ -199,12 +202,15 @@ function getDatabase() {
     return db;
 }
 
-function getDatabaseClient() {
+export function getClient() {
     if (!dbClient) {
-        throw new Error('Database not initialized. Call initializeDatabase() first.');
+        throw new Error('Database client not initialized. Call initializeDatabase() first.');
     }
     return dbClient;
 }
+
+// Export for sync schema
+export { getClient as getDatabaseClient };
 
 // Activity operations
 async function insertActivity(activity) {

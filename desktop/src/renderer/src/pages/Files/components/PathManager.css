@@ -1,0 +1,181 @@
+.path-manager {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: calc(var(--spacing) * 4);
+    margin-bottom: calc(var(--spacing) * 4);
+}
+
+.path-manager-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: calc(var(--spacing) * 4);
+}
+
+.path-manager-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--foreground);
+    margin: 0;
+}
+
+.path-manager-add-btn {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.path-manager-add-btn:hover {
+    background: oklch(from var(--primary) l c h / 0.9);
+}
+
+.path-manager-loading {
+    padding: calc(var(--spacing) * 8);
+    text-align: center;
+    color: var(--muted-foreground);
+}
+
+.path-manager-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--spacing) * 8);
+    text-align: center;
+    color: var(--muted-foreground);
+}
+
+.path-manager-empty svg {
+    margin-bottom: calc(var(--spacing) * 3);
+    opacity: 0.5;
+}
+
+.path-manager-empty-hint {
+    font-size: 12px;
+    margin-top: calc(var(--spacing) * 1);
+}
+
+.path-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 2);
+}
+
+.path-manager-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: calc(var(--spacing) * 3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    transition: all 0.2s ease;
+}
+
+.path-manager-item:hover {
+    border-color: var(--ring);
+}
+
+.path-manager-item.disabled {
+    opacity: 0.6;
+}
+
+.path-manager-item-main {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 3);
+    flex: 1;
+    min-width: 0;
+}
+
+.path-manager-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    flex-shrink: 0;
+}
+
+.path-manager-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.path-manager-item-path {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--foreground);
+    margin-bottom: calc(var(--spacing) * 1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.path-manager-item-meta {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    flex-wrap: wrap;
+}
+
+.path-manager-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    background: oklch(from var(--primary) l c h / 0.15);
+    color: var(--primary);
+}
+
+.path-manager-meta-text {
+    font-size: 11px;
+    color: var(--muted-foreground);
+}
+
+.path-manager-item-actions {
+    display: flex;
+    gap: calc(var(--spacing) * 1);
+    flex-shrink: 0;
+}
+
+.path-manager-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.path-manager-action-btn:hover {
+    background: var(--muted);
+    color: var(--foreground);
+    border-color: var(--ring);
+}
+
+.path-manager-action-btn.danger:hover {
+    background: oklch(from var(--destructive) l c h / 0.1);
+    color: var(--destructive);
+    border-color: var(--destructive);
+}

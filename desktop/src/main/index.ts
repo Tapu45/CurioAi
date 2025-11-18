@@ -22,6 +22,7 @@ import { startFileWatcher, stopFileWatcher } from './services/file-watcher.js';
 import { BrowserWindow } from 'electron';
 let mainWindow: BrowserWindow | null = null;
 import { Tray } from 'electron';
+import { createSyncTables } from './storage/sync-schema.js';
 let tray: Tray | null = null;
 
 // Initialize app
@@ -35,6 +36,7 @@ async function initializeApp() {
 
         // Initialize database
         await initializeDatabase();
+        await createSyncTables();
         logger.info('Database initialized');
 
         // Initialize ChromaDB

@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Cpu, HardDrive, Zap, Settings as SettingsIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import useAppStore from '@renderer/store/store';
 import useElectron from '@renderer/hooks/useElectron';
 import Button from '@renderer/components/common/Button/index.jsx';

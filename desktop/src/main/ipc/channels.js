@@ -68,6 +68,17 @@ export const CHANNELS = {
         DELETE: 'file:delete',
         WATCHER_STATUS: 'file:watcher-status',
         SEARCH: 'file:search',
+        // Add these:
+        SYNC_START: 'file:sync:start',
+        SYNC_STOP: 'file:sync:stop',
+        SYNC_PAUSE: 'file:sync:pause',
+        SYNC_RESUME: 'file:sync:resume',
+        SYNC_STATUS: 'file:sync:status',
+        SYNC_PROGRESS: 'file:sync:progress', // Event
+        SYNC_CONFIG_GET: 'file:sync:config:get',
+        SYNC_CONFIG_UPDATE: 'file:sync:config:update',
+        SYNC_CONFIG_ADD_PATH: 'file:sync:config:add-path',
+        SYNC_CONFIG_REMOVE_PATH: 'file:sync:config:remove-path',
     },
     
     // Model management

@@ -1,0 +1,60 @@
+.sync-stats {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: calc(var(--spacing) * 4);
+    margin-bottom: calc(var(--spacing) * 4);
+}
+
+.sync-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: calc(var(--spacing) * 4);
+}
+
+.sync-stats-item {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 3);
+}
+
+.sync-stats-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    flex-shrink: 0;
+}
+
+.sync-stats-icon.error {
+    background: oklch(from var(--destructive) l c h / 0.1);
+    color: var(--destructive);
+}
+
+.sync-stats-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.sync-stats-label {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    margin-bottom: calc(var(--spacing) * 0.5);
+}
+
+.sync-stats-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--foreground);
+}
+
+.sync-stats-value-small {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground);
+    word-break: break-word;
+}

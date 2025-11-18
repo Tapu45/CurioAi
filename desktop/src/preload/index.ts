@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { CHANNELS } from '../main/ipc/channels';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -65,5 +66,44 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Chat channels
     sendChatMessage: (message) => ipcRenderer.invoke('chat:send-message', message),
     getChatHistory: (limit) => ipcRenderer.invoke('chat:get-history', limit),
+
+    // File channels
+    getFiles: (options) => ipcRenderer.invoke('file:get-all', options),
+    getFileById: (id) => ipcRenderer.invoke('file:get-by-id', id),
+    getFileChunks: (fileId) => ipcRenderer.invoke('file:get-chunks', fileId),
+    getFileWatcherStatus: () => ipcRenderer.invoke('file:watcher-status'),
+    indexFile: (filePath, options) => ipcRenderer.invoke('file:index', filePath, options),
+    indexFiles: (filePaths, options) => ipcRenderer.invoke('file:index-batch', filePaths, options),
+    deleteFile: (fileId) => ipcRenderer.invoke('file:delete', fileId),
+    searchFiles: (query, options) => ipcRenderer.invoke('file:search', query, options),
+
+    // Model channels
+    getCurrentModels: () => ipcRenderer.invoke('model:get-current'),
+    getModelResources: () => ipcRenderer.invoke('model:get-resources'),
+    getAvailableModels: () => ipcRenderer.invoke('model:get-available'),
+    setModelTier: (tier, options) => ipcRenderer.invoke('model:set-tier', tier, options),
+    getRecommendedTier: () => ipcRenderer.invoke('model:get-recommended-tier'),
+    autoSelectModelTier: () => ipcRenderer.invoke('model:auto-select'),
+
+    getSyncStatus: () => ipcRenderer.invoke(CHANNELS.FILE.SYNC_STATUS),
+    startSync: (options?: any) => ipcRenderer.invoke(CHANNELS.FILE.SYNC_START, options),
+    stopSync: () => ipcRenderer.invoke(CHANNELS.FILE.SYNC_STOP),
+    pauseSync: () => ipcRenderer.invoke(CHANNELS.FILE.SYNC_PAUSE),
+    resumeSync: () => ipcRenderer.invoke(CHANNELS.FILE.SYNC_RESUME),
+    getSyncConfigs: () => ipcRenderer.invoke(CHANNELS.FILE.SYNC_CONFIG_GET),
+    addSyncPath: (config: any) => ipcRenderer.invoke(CHANNELS.FILE.SYNC_CONFIG_ADD_PATH, config),
+    updateSyncConfig: (id: number, updates: any) => ipcRenderer.invoke(CHANNELS.FILE.SYNC_CONFIG_UPDATE, id, updates),
+    removeSyncPath: (id: number) => ipcRenderer.invoke(CHANNELS.FILE.SYNC_CONFIG_REMOVE_PATH, id),
+
+    // Sync progress event listener
+    onSyncProgress: (callback: (event: any, data: any) => void) => {
+        ipcRenderer.on(CHANNELS.FILE.SYNC_PROGRESS, callback);
+    },
+    removeSyncProgressListener: () => {
+        ipcRenderer.removeAllListeners(CHANNELS.FILE.SYNC_PROGRESS);
+    },
+
+    // Directory selection (optional)
+    selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
 
 });

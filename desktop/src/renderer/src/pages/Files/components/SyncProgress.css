@@ -1,0 +1,151 @@
+.sync-progress {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: calc(var(--spacing) * 4);
+    margin-bottom: calc(var(--spacing) * 4);
+}
+
+.sync-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: calc(var(--spacing) * 3);
+}
+
+.sync-progress-title {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--foreground);
+}
+
+.sync-progress-spinner {
+    animation: spin 1s linear infinite;
+    color: var(--primary);
+}
+
+.sync-progress-stats {
+    display: flex;
+    gap: calc(var(--spacing) * 3);
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+
+.sync-progress-stat {
+    display: flex;
+    align-items: center;
+}
+
+.sync-progress-stat.error {
+    color: var(--destructive);
+}
+
+.sync-progress-bar-container {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 3);
+    margin-bottom: calc(var(--spacing) * 3);
+}
+
+.sync-progress-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--muted);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.sync-progress-bar-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: var(--radius-sm);
+    transition: width 0.3s ease;
+}
+
+.sync-progress-percentage {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    min-width: 40px;
+    text-align: right;
+}
+
+.sync-progress-current {
+    margin-bottom: calc(var(--spacing) * 3);
+    padding-top: calc(var(--spacing) * 3);
+    border-top: 1px solid var(--border);
+}
+
+.sync-progress-current-file {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    margin-bottom: calc(var(--spacing) * 2);
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+
+.sync-progress-current-spinner {
+    animation: spin 1s linear infinite;
+    color: var(--primary);
+}
+
+.sync-progress-current-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sync-progress-current-bar {
+    height: 4px;
+    background: var(--muted);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.sync-progress-current-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: var(--radius-sm);
+    transition: width 0.3s ease;
+}
+
+.sync-progress-summary {
+    display: flex;
+    gap: calc(var(--spacing) * 4);
+    padding-top: calc(var(--spacing) * 3);
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+}
+
+.sync-progress-summary-item {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    color: var(--muted-foreground);
+}
+
+.sync-progress-icon {
+    color: var(--muted-foreground);
+}
+
+.sync-progress-icon.success {
+    color: var(--success, #22c55e);
+}
+
+.sync-progress-icon.error {
+    color: var(--destructive);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}

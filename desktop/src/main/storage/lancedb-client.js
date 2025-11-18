@@ -199,8 +199,11 @@ async function getEmbeddingById(id) {
     try {
         const tbl = await getTable();
 
+        // Use a zero vector of correct dimension
+        const zeroVector = Array(EMBEDDING_DIMENSION).fill(0);
+
         const results = await tbl
-            .search([0]) // Dummy vector for filtering
+            .search(zeroVector) // Use proper dimension vector
             .where(`id = "${id}"`)
             .limit(1)
             .toArray();
@@ -248,9 +251,12 @@ async function getAllEmbeddings(limit = 100, offset = 0) {
     try {
         const tbl = await getTable();
 
+        // Use a zero vector of correct dimension (384) instead of [0]
+        const zeroVector = Array(EMBEDDING_DIMENSION).fill(0);
+
         // LanceDB doesn't have direct offset, so we'll get all and slice
         const results = await tbl
-            .search([0]) // Dummy vector to get all
+            .search(zeroVector) // Use proper dimension vector
             .limit(limit + offset)
             .toArray();
 
@@ -282,9 +288,12 @@ async function getAllEmbeddings(limit = 100, offset = 0) {
 async function countEmbeddings() {
     try {
         const tbl = await getTable();
+        // Use a zero vector of correct dimension
+        const zeroVector = Array(EMBEDDING_DIMENSION).fill(0);
+
         // Get all and count (LanceDB doesn't have direct count)
         const results = await tbl
-            .search([0])
+            .search(zeroVector) // Use proper dimension vector
             .limit(1000000) // Large limit to get all
             .toArray();
         return results.length;
@@ -298,9 +307,12 @@ async function countEmbeddings() {
 async function clearCollection() {
     try {
         const tbl = await getTable();
+        // Use a zero vector of correct dimension
+        const zeroVector = Array(EMBEDDING_DIMENSION).fill(0);
+
         // Get all IDs first
         const results = await tbl
-            .search([0])
+            .search(zeroVector) // Use proper dimension vector instead of [0]
             .limit(1000000)
             .toArray();
 

@@ -52,6 +52,19 @@ const getAPI = () => {
         onStatusChange: () => { },
         on: () => { },
         removeAllListeners: () => { },
+
+        getSyncStatus: async () => null,
+        startSync: async () => ({ success: false }),
+        stopSync: async () => ({ success: false }),
+        pauseSync: async () => ({ success: false }),
+        resumeSync: async () => ({ success: false }),
+        getSyncConfigs: async () => [],
+        addSyncPath: async () => ({ success: false, id: null }),
+        updateSyncConfig: async () => ({ success: false }),
+        removeSyncPath: async () => ({ success: false }),
+        onSyncProgress: () => { },
+        removeSyncProgressListener: () => { },
+        selectDirectory: async () => null,
     };
 };
 

@@ -162,6 +162,13 @@ export default function SearchPage() {
 function SearchResultItem({ result, onClick }) {
     const similarityPercent = Math.round(result.similarity * 100);
 
+    // Safely convert summary to string
+    const summaryText = typeof result.summary === 'string'
+        ? result.summary
+        : typeof result.summary === 'object' && result.summary !== null
+            ? result.summary.text || result.summary.summary || JSON.stringify(result.summary)
+            : String(result.summary || '');
+
     return (
         <div className="search-result-item" onClick={onClick}>
             <div className="result-main">
@@ -169,7 +176,7 @@ function SearchResultItem({ result, onClick }) {
                     <h3 className="result-title">{result.title}</h3>
                     <div className="result-similarity">{similarityPercent}% match</div>
                 </div>
-                <div className="result-summary">{result.summary}</div>
+                <div className="result-summary">{summaryText}</div>
                 <div className="result-meta">
                     {result.sourceType && (
                         <span className="result-badge">{result.sourceType}</span>

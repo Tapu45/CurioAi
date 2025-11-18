@@ -32,6 +32,16 @@ async function semanticSearch(query, options = {}) {
             .slice(0, limit)
             .map((item) => {
                 const similarity = 1 - item.distance;
+                // Ensure document is always a string
+                let summary = item.document;
+                if (typeof summary === 'object' && summary !== null) {
+                    // If document is an object, try to extract text or stringify
+                    summary = summary.text || summary.summary || JSON.stringify(summary);
+                }
+                if (typeof summary !== 'string') {
+                    summary = String(summary || '');
+                }
+
                 return {
                     id: item.id,
                     activityId: item.metadata?.activity_id,
@@ -39,7 +49,7 @@ async function semanticSearch(query, options = {}) {
                     fileId: item.metadata?.file_id,
                     chunkIndex: item.metadata?.chunk_index,
                     title: item.metadata?.title || 'Untitled',
-                    summary: item.document,
+                    summary: summary, // Now guaranteed to be a string
                     similarity,
                     sourceType: item.metadata?.source_type || item.metadata?.file_type || 'unknown',
                     timestamp: item.metadata?.timestamp,

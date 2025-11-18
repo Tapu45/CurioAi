@@ -1,7 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import useElectron from '@renderer/hooks/useElectron';
 import { FileText, Search, Filter, X, File, Image, Code, FileType, Loader2 } from 'lucide-react';
+import SyncToggle from './components/SyncToggle';
+import SyncProgress from './components/SyncProgress';
+import SyncStats from './components/SyncStats';
+import PathManager from './components/PathManager';
+import { useSyncStatus } from './hooks/useSyncStatus';
+import { useSyncProgress } from './hooks/useSyncProgress';
 import './Files.css';
+
 
 export default function FilesPage() {
     const electron = useElectron();
@@ -63,6 +70,27 @@ export default function FilesPage() {
         return () => clearInterval(interval);
     }, [loadWatcherStatus]);
 
+    const { status: syncStatus, startSync, stopSync, pauseSync, resumeSync } = useSyncStatus();
+    const { currentFile, progress } = useSyncProgress();
+
+    // Add sync toggle handler
+    const handleSyncToggle = async () => {
+        if (syncStatus.isRunning) {
+            await stopSync();
+        } else {
+            await startSync({ scanExisting: true });
+        }
+    };
+
+    // Add sync control handlers
+    const handlePauseResume = async () => {
+        if (syncStatus.isPaused) {
+            await resumeSync();
+        } else {
+            await pauseSync();
+        }
+    };
+
     const handleSearch = useCallback((query) => {
         setSearchQuery(query);
         setPage(0);
@@ -121,6 +149,38 @@ export default function FilesPage() {
                     </p>
                 </div>
             </div>
+
+            {/* Sync Section */}
+            {syncStatus.isRunning && (
+                <>
+                    <SyncProgress
+                        status={syncStatus}
+                        currentFile={currentFile}
+                        progress={progress}
+                    />
+                    <div className="files-sync-controls">
+                        <button
+                            className="files-sync-control-btn"
+                            onClick={handlePauseResume}
+                        >
+                            {syncStatus.isPaused ? 'Resume' : 'Pause'}
+                        </button>
+                        <button
+                            className="files-sync-control-btn danger"
+                            onClick={stopSync}
+                        >
+                            Stop
+                        </button>
+                    </div>
+                </>
+            )}
+
+            <SyncStats
+                stats={syncStatus.stats}
+                lastSync={syncStatus.queue?.stats?.lastSync}
+            />
+
+            <PathManager />
 
             {/* Search and Filters */}
             <div className="files-controls">

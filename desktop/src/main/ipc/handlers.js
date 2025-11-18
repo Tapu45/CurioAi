@@ -1,9 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow , dialog} from 'electron';
 import { CHANNELS } from './channels.js';
 import { getActivityStatus, pauseTracking, resumeTracking, getTodayActivityCount } from '../services/activity-tracker.js';
 import { getSettings, updateSettings, getWhitelist, updateWhitelist } from '../services/settings-service.js';
 import { getActivities, getSummary, deleteActivity } from '../storage/sqlite-db.js';
 import logger from '../utils/logger.js';
+import { registerSyncHandlers } from './sync-handlers.js';
 
 // Activity handlers
 function registerActivityHandlers() {
@@ -310,16 +311,6 @@ function registerSearchHandlers() {
 
 // Chat handlers
 function registerChatHandlers() {
-    ipcMain.handle(CHANNELS.CHAT.SEND_MESSAGE, async (event, message) => {
-        try {
-            const { sendChatMessage } = await import('../services/chat-service.js');
-            return await sendChatMessage(message, { storeHistory: true });
-        } catch (error) {
-            logger.error('Error sending chat message:', error);
-            throw error;
-        }
-    });
-
     ipcMain.handle(CHANNELS.CHAT.GET_HISTORY, async (event, limit = 50) => {
         try {
             const { getChatHistoryFromDB } = await import('../services/chat-service.js');
@@ -580,6 +571,18 @@ function registerModelHandlers() {
     });
 }
 
+function registerDialogHandlers() {
+    ipcMain.handle('dialog:select-directory', async () => {
+        const result = await dialog.showOpenDialog({
+            properties: ['openDirectory'],
+        });
+        if (!result.canceled && result.filePaths.length > 0) {
+            return result.filePaths[0];
+        }
+        return null;
+    });
+}
+
 // Register all IPC handlers
 function registerIpcHandlers() {
     registerActivityHandlers();
@@ -590,6 +593,8 @@ function registerIpcHandlers() {
     registerChatHandlers();
     registerFileHandlers();
     registerModelHandlers();
+    registerSyncHandlers();
+    registerDialogHandlers();
     logger.info('All IPC handlers registered');
 }
 

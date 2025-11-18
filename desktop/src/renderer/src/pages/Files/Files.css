@@ -469,3 +469,36 @@
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
+/* Add to Files.css */
+.files-sync-controls {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    margin-bottom: calc(var(--spacing) * 4);
+}
+
+.files-sync-control-btn {
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--foreground);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.files-sync-control-btn:hover {
+    background: var(--muted);
+    border-color: var(--ring);
+}
+
+.files-sync-control-btn.danger {
+    color: var(--destructive);
+}
+
+.files-sync-control-btn.danger:hover {
+    background: oklch(from var(--destructive) l c h / 0.1);
+    border-color: var(--destructive);
+}

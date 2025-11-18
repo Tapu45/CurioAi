@@ -49,7 +49,7 @@ export default function MainPage() {
 
     const statusText = useMemo(() => {
         if (isPaused) return 'Paused';
-        if (isTracking) return 'status-badge status-badge-active';
+        if (isTracking) return 'Active'; // Fixed: was returning CSS class name
         return 'Idle';
     }, [isPaused, isTracking]);
 
@@ -85,7 +85,18 @@ export default function MainPage() {
                 // Load graph stats
                 const stats = await electron.getGraphStats?.();
                 if (stats) {
-                    setGraphStats({ nodes: stats.nodes || 0, edges: stats.edges || 0 });
+                    // Handle both object and number formats
+                    const nodeCount = typeof stats.nodes === 'object' && stats.nodes !== null
+                        ? Object.values(stats.nodes).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
+                        : typeof stats.nodes === 'number' ? stats.nodes : 0;
+
+                    const edgeCount = typeof stats.edges === 'object' && stats.edges !== null
+                        ? Object.values(stats.edges).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
+                        : typeof stats.relationships === 'object' && stats.relationships !== null
+                            ? Object.values(stats.relationships).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
+                            : typeof stats.edges === 'number' ? stats.edges : 0;
+
+                    setGraphStats({ nodes: nodeCount, edges: edgeCount });
                 }
             } catch (error) {
                 console.error('Failed to load stats:', error);

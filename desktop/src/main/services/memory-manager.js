@@ -1,6 +1,5 @@
-import { BufferMemory } from '@langchain/core/memory';
-import { ConversationSummaryMemory } from '@langchain/community/memory/conversation_summary';
-import { VectorStoreRetrieverMemory } from '@langchain/community/memory/vectorstore';
+// import { ConversationSummaryMemory } from '@langchain/community/memory/conversation_summary';
+// import { VectorStoreRetrieverMemory } from '@langchain/community/memory/vectorstore';
 import { createLanceDBVectorStore } from './rag-service.js';
 import { generateEmbedding } from './ai-service-client.js';
 import logger from '../utils/logger.js';
@@ -20,12 +19,39 @@ class MemoryManager {
      * Initialize buffer memory (short-term, last N messages)
      */
     initializeBufferMemory(maxTokenLimit = 2000) {
-        this.bufferMemory = new BufferMemory({
-            returnMessages: true,
-            memoryKey: 'history',
-            inputKey: 'input',
-            outputKey: 'output',
-        });
+        // Use ChatMessageHistory instead of BufferMemory
+        this.bufferMemory = {
+            chatHistory: new ChatMessageHistory(),
+            maxTokenLimit,
+            async loadMemoryVariables() {
+                const messages = await this.chatHistory.getMessages();
+                return {
+                    history: messages.map(msg => ({
+                        role: msg instanceof HumanMessage ? 'user' : 'assistant',
+                        content: msg.content,
+                    })),
+                };
+            },
+            async saveContext({ input }, { output }) {
+                await this.chatHistory.addUserMessage(input);
+                await this.chatHistory.addAIMessage(output);
+
+                // Trim if too many messages (simple token limit approximation)
+                const messages = await this.chatHistory.getMessages();
+                if (messages.length > 20) {
+                    // Keep only last 20 messages
+                    const recentMessages = messages.slice(-20);
+                    await this.chatHistory.clear();
+                    for (const msg of recentMessages) {
+                        if (msg instanceof HumanMessage) {
+                            await this.chatHistory.addUserMessage(msg.content);
+                        } else {
+                            await this.chatHistory.addAIMessage(msg.content);
+                        }
+                    }
+                }
+            },
+        };
         return this.bufferMemory;
     }
 

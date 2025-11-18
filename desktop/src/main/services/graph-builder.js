@@ -334,13 +334,26 @@ async function getGraphStatistics() {
         const { getGraphStats } = await import('../storage/graph-client.js');
         const stats = await getGraphStats();
 
+        // Calculate total node count from the object
+        const totalNodes = typeof stats.nodes === 'object' && stats.nodes !== null
+            ? Object.values(stats.nodes).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
+            : typeof stats.nodes === 'number' ? stats.nodes : 0;
+
+        // Calculate total edge count from relationships object
+        const totalEdges = typeof stats.relationships === 'object' && stats.relationships !== null
+            ? Object.values(stats.relationships).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
+            : typeof stats.relationships === 'number' ? stats.relationships : 0;
+
         return {
-            nodes: stats.nodes,
-            relationships: stats.relationships,
+            nodes: totalNodes,
+            edges: totalEdges,
+            // Optionally include the breakdown for future use
+            nodeBreakdown: stats.nodes,
+            relationshipBreakdown: stats.relationships,
         };
     } catch (error) {
         logger.error('Error getting graph statistics:', error);
-        return { nodes: {}, relationships: {} };
+        return { nodes: 0, edges: 0 };
     }
 }
 
