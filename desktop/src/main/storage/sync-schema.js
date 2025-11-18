@@ -62,11 +62,3 @@ export async function createSyncTables() {
         throw error;
     }
 }
-
-/**
- * Get database client (helper function)
- */
-async function getDatabaseClient() {
-    const { getClient } = await import('./sqlite-db.js');
-    return getClient();
-}

@@ -5,7 +5,7 @@ import { getAppConfig } from '../utils/config-manager.js';
 const DEFAULT_AI_SERVICE_URL = 'http://127.0.0.1:8000';
 
 // Get AI service URL from config
-function getAIServiceURL() {
+export function getAIServiceURL() {
     const appConfig = getAppConfig();
     return appConfig.aiServiceURL || DEFAULT_AI_SERVICE_URL;
 }

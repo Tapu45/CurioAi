@@ -18,9 +18,23 @@ from src.services.embedding import generate_embedding
 from src.services.concept_extractor import extract_concepts
 from src.utils.logger import setup_logger
 
+from src.services.vision.image_analyzer import analyze_image
+from src.services.extraction.structured_extractor import extract_structured_data
+from src.services.extraction.table_extractor import extract_tables
+from fastapi import UploadFile, File
+
 from src.services.model_manager import get_model_manager
 from pydantic import BaseModel
 from typing import Optional
+
+from src.services.llamaindex_service import (
+    load_documents_from_files,
+    load_documents_from_directory,
+    create_vector_store_index,
+    query_index,
+    create_query_engine,
+)
+from llama_index.core import Document
 
 logger = setup_logger()
 router = APIRouter()
@@ -226,3 +240,192 @@ async def check_model(model: str):
     except Exception as e:
         logger.error(f"Error checking model: {e}")
         return {"available": False, "error": str(e)}
+
+@router.post("/analyze-image")
+async def analyze_image_endpoint(request: dict):
+    """Analyze image: OCR + vision model"""
+    try:
+        file_path = request.get("file_path")
+        options = request.get("options", {})
+        
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path is required")
+        
+        result = await analyze_image(file_path, options)
+        return result
+    except Exception as e:
+        logger.error(f"Error in analyze-image endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/extract-structured")
+async def extract_structured_endpoint(request: dict):
+    """Extract structured data from documents"""
+    try:
+        file_path = request.get("file_path")
+        file_type = request.get("file_type", "")
+        
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path is required")
+        
+        result = await extract_structured_data(file_path, file_type)
+        return result
+    except Exception as e:
+        logger.error(f"Error in extract-structured endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/extract-tables")
+async def extract_tables_endpoint(request: dict):
+    """Extract tables from documents"""
+    try:
+        file_path = request.get("file_path")
+        file_type = request.get("file_type", "")
+        
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path is required")
+        
+        result = await extract_tables(file_path, file_type)
+        return result
+    except Exception as e:
+        logger.error(f"Error in extract-tables endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/llamaindex/load-documents")
+async def llamaindex_load_documents(request: dict):
+    """Load documents using LlamaIndex loaders"""
+    try:
+        file_paths = request.get("file_paths", [])
+        chunk_size = request.get("chunk_size", 1000)
+        chunk_overlap = request.get("chunk_overlap", 200)
+        
+        if not file_paths:
+            raise HTTPException(status_code=400, detail="file_paths is required")
+        
+        documents = load_documents_from_files(file_paths, chunk_size, chunk_overlap)
+        
+        # Convert to JSON-serializable format
+        result = []
+        for doc in documents:
+            result.append({
+                'id': doc.id_ if hasattr(doc, 'id_') else None,
+                'text': doc.text,
+                'content': doc.text,  # Alias for compatibility
+                'metadata': doc.metadata,
+                'file_path': doc.metadata.get('file_path', ''),
+            })
+        
+        return {
+            'documents': result,
+            'count': len(result)
+        }
+    except Exception as e:
+        logger.error(f"Error in llamaindex/load-documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/llamaindex/load-directory")
+async def llamaindex_load_directory(request: dict):
+    """Load documents from directory"""
+    try:
+        directory_path = request.get("directory_path")
+        recursive = request.get("recursive", True)
+        patterns = request.get("patterns", ['**/*'])
+        
+        if not directory_path:
+            raise HTTPException(status_code=400, detail="directory_path is required")
+        
+        documents = load_documents_from_directory(directory_path, recursive, patterns)
+        
+        # Convert to JSON-serializable format
+        result = []
+        for doc in documents:
+            result.append({
+                'id': doc.id_ if hasattr(doc, 'id_') else None,
+                'text': doc.text,
+                'content': doc.text,
+                'metadata': doc.metadata,
+                'file_path': doc.metadata.get('file_path', ''),
+            })
+        
+        return {
+            'documents': result,
+            'count': len(result)
+        }
+    except Exception as e:
+        logger.error(f"Error in llamaindex/load-directory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/llamaindex/query")
+async def llamaindex_query(request: dict):
+    """Query using LlamaIndex query engine"""
+    try:
+        query = request.get("query")
+        k = request.get("k", 5)
+        filters = request.get("filters", {})
+        use_reranking = request.get("use_reranking", False)
+        
+        if not query:
+            raise HTTPException(status_code=400, detail="query is required")
+        
+        # For now, use a simple approach - in production, maintain index instances
+        # This is a simplified version - you may want to maintain index cache
+        from src.services.llamaindex_service import get_vector_store_index
+        
+        # Get or create index (this should be cached in production)
+        index = get_vector_store_index()
+        
+        if not index:
+            raise HTTPException(status_code=500, detail="Vector store index not available")
+        
+        result = await query_index(query, index, k)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error in llamaindex/query: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/llamaindex/create-retriever-engine")
+async def llamaindex_create_retriever_engine(request: dict):
+    """Create retriever query engine"""
+    try:
+        k = request.get("k", 5)
+        response_mode = request.get("response_mode", "compact")
+        
+        from src.services.llamaindex_service import get_vector_store_index, create_query_engine
+        
+        index = get_vector_store_index()
+        if not index:
+            raise HTTPException(status_code=500, detail="Vector store index not available")
+        
+        query_engine = create_query_engine(index, k, response_mode)
+        
+        # Store engine (in production, use proper caching)
+        engine_id = f"engine_{id(query_engine)}"
+        
+        return {
+            'engine_id': engine_id,
+            'k': k,
+            'response_mode': response_mode,
+        }
+    except Exception as e:
+        logger.error(f"Error creating retriever engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/llamaindex/create-router-engine")
+async def llamaindex_create_router_engine(request: dict):
+    """Create router query engine for multi-source queries"""
+    try:
+        sources = request.get("sources", [])
+        
+        if not sources:
+            raise HTTPException(status_code=400, detail="sources is required")
+        
+        # Router engine implementation
+        # This would create multiple query engines and route queries appropriately
+        # Simplified version for now
+        
+        return {
+            'engine_id': f"router_{len(sources)}",
+            'sources': sources,
+        }
+    except Exception as e:
+        logger.error(f"Error creating router engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

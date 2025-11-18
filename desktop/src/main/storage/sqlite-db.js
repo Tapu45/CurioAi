@@ -122,6 +122,60 @@ async function createTables(client) {
         )
     `);
 
+    // Structured data table
+    await client.execute(`
+    CREATE TABLE IF NOT EXISTS file_structured_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_id INTEGER NOT NULL,
+        data_type TEXT NOT NULL, -- 'table', 'form', 'key_value', 'list', 'percentage'
+        extracted_data TEXT NOT NULL, -- JSON
+        confidence REAL,
+        extraction_method TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+    )
+`);
+
+    // Image analysis table
+    await client.execute(`
+    CREATE TABLE IF NOT EXISTS image_analysis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_id INTEGER NOT NULL,
+        ocr_text TEXT,
+        scene_description TEXT,
+        objects_detected TEXT, -- JSON array
+        confidence REAL,
+        analysis_method TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+    )
+`);
+
+    // Add columns to files table (with IF NOT EXISTS check)
+    await client.execute(`
+    ALTER TABLE files ADD COLUMN source_type TEXT DEFAULT 'workspace'
+`);
+    await client.execute(`
+    ALTER TABLE files ADD COLUMN structured_extracted BOOLEAN DEFAULT 0
+`);
+    await client.execute(`
+    ALTER TABLE files ADD COLUMN image_analyzed BOOLEAN DEFAULT 0
+`);
+
+    // Add indexes
+    await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_file_structured_data_file_id ON file_structured_data(file_id);
+`);
+    await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_file_structured_data_type ON file_structured_data(data_type);
+`);
+    await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_image_analysis_file_id ON image_analysis(file_id);
+`);
+    await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_files_source_type ON files(source_type);
+`);
+
     // Indexes for files
     await client.execute(`
         CREATE INDEX IF NOT EXISTS idx_files_type ON files(type);
@@ -164,7 +218,7 @@ async function createTables(client) {
     `);
 
     logger.info('Database tables ensured');
-    
+
     await createSyncTables();
 }
 
@@ -623,7 +677,6 @@ async function getFileChunks(fileId) {
 export {
     initializeDatabase,
     getDatabase,
-    getDatabaseClient,
     insertActivity,
     getActivities,
     getActivityById,

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import useElectron from '@renderer/hooks/useElectron';
 import { FileText, Search, Filter, X, File, Image, Code, FileType, Loader2 } from 'lucide-react';
-import SyncToggle from './components/SyncToggle';
+import SyncToggle from './components/syncToggle';
 import SyncProgress from './components/SyncProgress';
 import SyncStats from './components/SyncStats';
 import PathManager from './components/PathManager';

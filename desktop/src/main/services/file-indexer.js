@@ -6,6 +6,7 @@ import { insertFile, getFileByHash, getFileByPath, insertFileChunk } from '../st
 import { storeEmbedding } from '../storage/lancedb-client.js';
 import { generateEmbedding } from './ai-service-client.js';
 import logger from '../utils/logger.js';
+import { loadDocument } from './llama-index/llama-index-loader.js';
 
 // Chunking configuration
 const CHUNK_SIZE = 1000; // characters per chunk
@@ -59,7 +60,12 @@ function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
  */
 async function indexFile(filePath, options = {}) {
     try {
-        const { forceReindex = false, generateEmbeddings = true } = options;
+        const {
+            forceReindex = false,
+            generateEmbeddings = true,
+            deepExtraction = false,
+            useLlamaIndex = false, // Add this option
+        } = options;
 
         // Check if file exists
         try {
@@ -99,7 +105,29 @@ async function indexFile(filePath, options = {}) {
 
         // Process file to extract content
         logger.info(`Indexing file: ${path.basename(filePath)}`);
-        const extracted = await processFile({ path: filePath, name: path.basename(filePath) });
+        let extracted = await processFile({ path: filePath, name: path.basename(filePath) });
+
+        if (useLlamaIndex) {
+            try {
+                const llamaindexDoc = await loadDocument(filePath, {
+                    chunkSize: CHUNK_SIZE,
+                    chunkOverlap: CHUNK_OVERLAP,
+                });
+
+                if (llamaindexDoc) {
+                    // Use LlamaIndex document content
+                    extracted.content = llamaindexDoc.pageContent;
+                    extracted.metadata = {
+                        ...extracted.metadata,
+                        ...llamaindexDoc.metadata,
+                        loadedWithLlamaIndex: true,
+                    };
+                }
+            } catch (llamaindexError) {
+                logger.warn(`LlamaIndex loading failed, using fallback: ${llamaindexError.message}`);
+                // Continue with regular extraction
+            }
+        }
 
         if (!extracted || !extracted.content || extracted.content.trim().length === 0) {
             logger.debug(`No content extracted from: ${path.basename(filePath)}`);
@@ -172,6 +200,25 @@ async function indexFile(filePath, options = {}) {
                 } catch (chunkError) {
                     logger.error(`Error processing chunk ${chunk.index}:`, chunkError);
                 }
+            }
+        }
+
+        // Deep extraction option
+        if (deepExtraction) {
+            try {
+                const { getDeepExtractor } = await import('./extraction/deep-extractor.js');
+                const deepExtractor = getDeepExtractor();
+
+                // Trigger deep extraction asynchronously (don't block indexing)
+                deepExtractor.extract(fileId, filePath, fileType, {
+                    extractStructured: true,
+                    analyzeImages: true,
+                    extractTables: true,
+                }).catch(error => {
+                    logger.error(`Deep extraction failed for file ${fileId}:`, error);
+                });
+            } catch (error) {
+                logger.error('Error triggering deep extraction:', error);
             }
         }
 

@@ -79,6 +79,9 @@ export const CHANNELS = {
         SYNC_CONFIG_UPDATE: 'file:sync:config:update',
         SYNC_CONFIG_ADD_PATH: 'file:sync:config:add-path',
         SYNC_CONFIG_REMOVE_PATH: 'file:sync:config:remove-path',
+        EXTRACT_DEEP: 'file:extract-deep',
+        GET_STRUCTURED_DATA: 'file:get-structured-data',
+        GET_IMAGE_ANALYSIS: 'file:get-image-analysis',
     },
     
     // Model management
@@ -89,6 +92,12 @@ export const CHANNELS = {
         SET_TIER: 'model:set-tier',
         AUTO_SELECT: 'model:auto-select',
         GET_AVAILABLE: 'model:get-available',
+    },
+
+    AGENT: {
+        CHAT: 'agent:chat',
+        STATUS: 'agent:status',
+        TOOL_EXECUTE: 'agent:tool:execute',
     },
 };
 

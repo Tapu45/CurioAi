@@ -1,9 +1,9 @@
-import { getRAGChain } from './rag-chain.js';
+import { getHybridQueryHandler } from './agents/hybrid-query-handler.js'; // Add import at top
 import { insertChatMessage, getChatHistory } from '../storage/chat-history.js';
 import logger from '../utils/logger.js';
 
-// RAG-based chat response using LangChain
-async function sendChatMessage(message, options = {}) {
+// Hybrid chat response using Hybrid Handler
+async function handleChatMessage(query, options = {}) {
     try {
         const {
             maxContextItems = 5,
@@ -12,19 +12,16 @@ async function sendChatMessage(message, options = {}) {
             filters = {},
         } = options;
 
-        logger.info(`Processing chat message: "${message.substring(0, 50)}..."`);
+        logger.info(`Processing chat message: "${query.substring(0, 50)}..."`);
 
-        // Get RAG chain instance
-        const ragChain = await getRAGChain({
-            k: maxContextItems,
-            useMemory,
-        });
+        // Use hybrid query handler instead of direct RAG
+        const hybridHandler = getHybridQueryHandler();
+        await hybridHandler.initialize();
 
-        // Invoke RAG chain
-        const response = await ragChain.invoke(message, {
+        const result = await hybridHandler.handleQuery(query, {
             filters,
             maxContextItems,
-            includeMemory: useMemory,
+            useMemory,
         });
 
         // Store in chat history
@@ -32,35 +29,42 @@ async function sendChatMessage(message, options = {}) {
             try {
                 await insertChatMessage({
                     role: 'user',
-                    content: message,
+                    content: query,
                 });
                 await insertChatMessage({
                     role: 'assistant',
-                    content: response.answer,
+                    content: result.answer,
                     metadata: JSON.stringify({
-                        sources: response.sources,
-                        confidence: response.confidence,
-                        contextUsed: response.contextUsed,
-                        memoryUsed: response.memoryUsed,
+                        sources: result.sources,
+                        method: result.method,
+                        toolCalls: result.toolCalls,
+                        confidence: result.confidence,
+                        routing: result.routing,
                     }),
                 });
             } catch (error) {
                 logger.error('Failed to store chat history:', error);
-                // Don't fail the request if history storage fails
             }
         }
 
-        logger.info(`Chat response generated with ${response.contextUsed} context items, confidence: ${response.confidence}%`);
-        return response;
+        logger.info(`Chat response generated with method: ${result.method}, confidence: ${result.confidence}%`);
+        return {
+            answer: result.answer,
+            sources: result.sources || [],
+            method: result.method || 'rag',
+            toolCalls: result.toolCalls || [],
+            confidence: result.confidence || 0,
+            routing: result.routing,
+        };
     } catch (error) {
         logger.error('Error in chat service:', error);
-
-        // Return a helpful error message
         return {
             answer: `I encountered an error while processing your question: ${error.message}. Please make sure the local AI service is running and try again.`,
             sources: [],
             confidence: 0,
-            contextUsed: 0,
+            method: 'error',
+            toolCalls: [],
+            routing: null,
             error: true,
         };
     }
@@ -76,4 +80,4 @@ async function getChatHistoryFromDB(limit = 50) {
     }
 }
 
-export { sendChatMessage, getChatHistoryFromDB };
+export { handleChatMessage, getChatHistoryFromDB };

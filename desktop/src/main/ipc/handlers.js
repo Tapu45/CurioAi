@@ -5,6 +5,8 @@ import { getSettings, updateSettings, getWhitelist, updateWhitelist } from '../s
 import { getActivities, getSummary, deleteActivity } from '../storage/sqlite-db.js';
 import logger from '../utils/logger.js';
 import { registerSyncHandlers } from './sync-handlers.js';
+import { getHybridQueryHandler } from '../services/agents/hybrid-query-handler.js';
+import { getAgentManager } from '../services/agents/agent-manager.js';
 
 // Activity handlers
 function registerActivityHandlers() {
@@ -488,6 +490,51 @@ function registerFileHandlers() {
             throw error;
         }
     });
+
+    ipcMain.handle(CHANNELS.FILE.EXTRACT_DEEP, async (event, fileId) => {
+        try {
+            const { getDeepExtractor } = await import('../services/extraction/deep-extractor.js');
+            const { getFileById } = await import('../storage/sqlite-db.js');
+
+            const file = await getFileById(fileId);
+            if (!file) {
+                throw new Error('File not found');
+            }
+
+            const deepExtractor = getDeepExtractor();
+            const result = await deepExtractor.extract(
+                fileId,
+                file.path,
+                file.mime_type || file.type,
+                { forceReextract: true }
+            );
+
+            return { success: true, result };
+        } catch (error) {
+            logger.error('Error in deep extraction:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.FILE.GET_STRUCTURED_DATA, async (event, fileId) => {
+        try {
+            const { getStructuredData } = await import('../services/extraction/structured-extractor.js');
+            return await getStructuredData(fileId);
+        } catch (error) {
+            logger.error('Error getting structured data:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.FILE.GET_IMAGE_ANALYSIS, async (event, fileId) => {
+        try {
+            const { getImageAnalysis } = await import('../services/extraction/image-analyzer.js');
+            return await getImageAnalysis(fileId);
+        } catch (error) {
+            logger.error('Error getting image analysis:', error);
+            throw error;
+        }
+    });
 }
 
 // Model handlers
@@ -583,6 +630,30 @@ function registerDialogHandlers() {
     });
 }
 
+// Agent handlers
+function registerAgentHandlers() {
+    ipcMain.handle(CHANNELS.AGENT.CHAT, async (event, query, options = {}) => {
+        try {
+            const handler = getHybridQueryHandler();
+            await handler.initialize();
+            return await handler.handleQuery(query, options);
+        } catch (error) {
+            logger.error('Error in agent chat:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.AGENT.STATUS, async () => {
+        try {
+            const manager = getAgentManager();
+            return manager.getStatus();
+        } catch (error) {
+            logger.error('Error getting agent status:', error);
+            throw error;
+        }
+    });
+}
+
 // Register all IPC handlers
 function registerIpcHandlers() {
     registerActivityHandlers();
@@ -595,6 +666,7 @@ function registerIpcHandlers() {
     registerModelHandlers();
     registerSyncHandlers();
     registerDialogHandlers();
+    registerAgentHandlers();
     logger.info('All IPC handlers registered');
 }
 

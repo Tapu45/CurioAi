@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     
     # Model Selection (can be overridden via API)
     MODEL_TIER: Optional[str] = None  # LOW_END, MID_RANGE, HIGH_END, PREMIUM
+
+    # LlamaIndex Configuration
+    LLAMAINDEX_PERSIST_DIR: Optional[str] = None  # Auto-set in main.py
+    LLAMAINDEX_CHUNK_SIZE: int = 1000
+    LLAMAINDEX_CHUNK_OVERLAP: int = 200
     
     class Config:
         env_file = ".env"

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-build:
+    name: Lint & Build Desktop App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./desktop
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint main process
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Format check
+        run: npm run format -- --check || echo "Format check skipped"
+        continue-on-error: true
+
+      - name: Build desktop app
+        run: npm run build
+
+  lint-local-ai-service:
+    name: Lint Local AI Service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./desktop/src/local-ai-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: ./desktop/src/local-ai-service/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install black flake8 mypy
+
+      - name: Lint with flake8
+        run: |
+          flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics --max-line-length=100
+        continue-on-error: true
+
+      - name: Format check with black
+        run: |
+          black --check src --line-length=100
+        continue-on-error: true
+
+      - name: Type check with mypy
+        run: |
+          mypy src --ignore-missing-imports || echo "Type check skipped"
+        continue-on-error: true
