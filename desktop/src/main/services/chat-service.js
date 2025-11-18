@@ -1,6 +1,12 @@
-import { getHybridQueryHandler } from './agents/hybrid-query-handler.js'; // Add import at top
+import { getHybridQueryHandler } from './agents/hybrid-query-handler.js';
 import { insertChatMessage, getChatHistory } from '../storage/chat-history.js';
 import logger from '../utils/logger.js';
+import { SOURCE_TYPES } from './source-types.js';
+import { getAgentStatusTracker } from './agents/agent-status-tracker.js'; // Add import
+import { EventEmitter } from 'events'; // Add import
+
+// Create event emitter for chat status
+const chatEventEmitter = new EventEmitter();
 
 // Hybrid chat response using Hybrid Handler
 async function handleChatMessage(query, options = {}) {
@@ -10,11 +16,24 @@ async function handleChatMessage(query, options = {}) {
             storeHistory = true,
             useMemory = true,
             filters = {},
+            sourceType = SOURCE_TYPES.ALL,
         } = options;
 
-        logger.info(`Processing chat message: "${query.substring(0, 50)}..."`);
+        logger.info(`Processing chat message: "${query.substring(0, 50)}..." with source: ${sourceType}`);
 
-        // Use hybrid query handler instead of direct RAG
+        // Status tracking
+        const statusTracker = getAgentStatusTracker();
+        const statusListener = (event, data) => {
+            chatEventEmitter.emit('agent-status', data);
+        };
+        statusTracker.on('status', statusListener);
+        statusTracker.on('reasoning', statusListener);
+        statusTracker.on('toolCall', statusListener);
+        statusTracker.on('progress', statusListener);
+        statusTracker.on('complete', statusListener);
+        statusTracker.on('error', statusListener);
+
+        // Use hybrid query handler
         const hybridHandler = getHybridQueryHandler();
         await hybridHandler.initialize();
 
@@ -22,6 +41,7 @@ async function handleChatMessage(query, options = {}) {
             filters,
             maxContextItems,
             useMemory,
+            sourceType,
         });
 
         // Store in chat history
@@ -48,6 +68,10 @@ async function handleChatMessage(query, options = {}) {
         }
 
         logger.info(`Chat response generated with method: ${result.method}, confidence: ${result.confidence}%`);
+
+        // Cleanup listeners
+        statusTracker.removeAllListeners();
+
         return {
             answer: result.answer,
             sources: result.sources || [],
@@ -80,4 +104,4 @@ async function getChatHistoryFromDB(limit = 50) {
     }
 }
 
-export { handleChatMessage, getChatHistoryFromDB };
+export { handleChatMessage, getChatHistoryFromDB, chatEventEmitter };

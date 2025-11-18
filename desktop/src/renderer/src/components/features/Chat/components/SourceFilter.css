@@ -1,0 +1,108 @@
+.source-filter {
+    position: relative;
+    display: inline-flex;
+}
+
+.source-filter-button {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    color: var(--foreground);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.source-filter-button:hover {
+    background: var(--muted);
+    border-color: var(--ring);
+}
+
+.source-filter-label {
+    font-weight: 500;
+}
+
+.source-filter-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.source-filter-clear:hover {
+    background: var(--destructive);
+    color: var(--destructive-foreground);
+}
+
+.source-filter-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+}
+
+.source-filter-dropdown {
+    position: absolute;
+    top: calc(100% + calc(var(--spacing) * 1));
+    left: 0;
+    z-index: 20;
+    min-width: 180px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    animation: slideDown 0.2s ease-out;
+}
+
+.source-filter-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+    border: none;
+    background: transparent;
+    color: var(--foreground);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.source-filter-option:hover {
+    background: var(--muted);
+}
+
+.source-filter-option.active {
+    background: oklch(from var(--primary) l c h / 0.1);
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.source-filter-check {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

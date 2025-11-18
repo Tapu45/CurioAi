@@ -575,6 +575,7 @@ async function insertFile(fileData) {
                 extractedText: fileData.extractedText || null,
                 metadata: fileData.metadata ? JSON.stringify(fileData.metadata) : null,
                 processedAt: fileData.processedAt || new Date().toISOString(),
+                sourceType: fileData.sourceType || 'workspace',
             })
             .returning({ id: files.id });
         return row.id;

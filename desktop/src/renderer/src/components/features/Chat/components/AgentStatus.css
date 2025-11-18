@@ -1,0 +1,178 @@
+.agent-status {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: calc(var(--spacing) * 3);
+    margin: calc(var(--spacing) * 2) 0;
+}
+
+.agent-status-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+}
+
+.agent-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--foreground);
+}
+
+.agent-status-spinner {
+    animation: spin 1s linear infinite;
+    color: var(--primary);
+}
+
+.agent-status-success {
+    color: var(--success, #22c55e);
+}
+
+.agent-status-error {
+    color: var(--destructive);
+}
+
+.agent-status-progress {
+    flex: 1;
+    max-width: 200px;
+    margin-left: calc(var(--spacing) * 3);
+}
+
+.agent-status-progress-bar {
+    height: 4px;
+    background: var(--muted);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.agent-status-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: var(--radius-sm);
+    transition: width 0.3s ease;
+}
+
+.agent-status-details {
+    margin-top: calc(var(--spacing) * 3);
+    padding-top: calc(var(--spacing) * 3);
+    border-top: 1px solid var(--border);
+}
+
+.agent-status-section {
+    margin-bottom: calc(var(--spacing) * 4);
+}
+
+.agent-status-section:last-child {
+    margin-bottom: 0;
+}
+
+.agent-status-section-title {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1.5);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    margin-bottom: calc(var(--spacing) * 2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.agent-status-steps {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 2);
+}
+
+.agent-status-step {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    padding: calc(var(--spacing) * 2);
+    background: var(--muted);
+    border-radius: var(--radius);
+    font-size: 12px;
+}
+
+.agent-status-step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.agent-status-step-content {
+    flex: 1;
+    color: var(--foreground);
+    line-height: 1.5;
+}
+
+.agent-status-tools {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 2);
+}
+
+.agent-status-tool {
+    padding: calc(var(--spacing) * 2);
+    background: var(--muted);
+    border-radius: var(--radius);
+    font-size: 12px;
+}
+
+.agent-status-tool-name {
+    font-weight: 600;
+    color: var(--foreground);
+    margin-bottom: calc(var(--spacing) * 1);
+}
+
+.agent-status-tool-input {
+    color: var(--muted-foreground);
+    font-size: 11px;
+    margin-top: calc(var(--spacing) * 1);
+    word-break: break-all;
+}
+
+.agent-status-tool-status {
+    display: inline-block;
+    padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: calc(var(--spacing) * 1);
+    text-transform: uppercase;
+}
+
+.agent-status-tool-status-executing {
+    background: oklch(from var(--primary) l c h / 0.15);
+    color: var(--primary);
+}
+
+.agent-status-tool-status-completed {
+    background: oklch(from var(--success, #22c55e) l c h / 0.15);
+    color: var(--success, #22c55e);
+}
+
+.agent-status-tool-status-failed {
+    background: oklch(from var(--destructive) l c h / 0.15);
+    color: var(--destructive);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}

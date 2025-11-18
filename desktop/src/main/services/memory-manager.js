@@ -161,6 +161,55 @@ class MemoryManager {
     }
 
     /**
+     * Track entities mentioned in conversation
+     */
+    trackEntity(entity, context) {
+        if (!this.entityMemory.has(entity)) {
+            this.entityMemory.set(entity, []);
+        }
+        this.entityMemory.get(entity).push({
+            context,
+            timestamp: new Date().toISOString(),
+        });
+
+        // Keep only last 10 mentions per entity
+        const mentions = this.entityMemory.get(entity);
+        if (mentions.length > 10) {
+            this.entityMemory.set(entity, mentions.slice(-10));
+        }
+    }
+
+    /**
+     * Get entity context
+     */
+    getEntityContext(entity) {
+        const mentions = this.entityMemory.get(entity) || [];
+        return mentions.map(m => m.context).join('\n');
+    }
+
+    /**
+     * Extract entities from text (simple implementation)
+     */
+    extractEntities(text) {
+        // Simple entity extraction - can be enhanced with NER
+        const entities = [];
+        const patterns = [
+            /\b\d+(?:th|st|nd|rd)\s+class\b/gi,
+            /\b\d+%\b/g,
+            /\b(?:result|grade|score|exam|test)\b/gi,
+        ];
+
+        for (const pattern of patterns) {
+            const matches = text.match(pattern);
+            if (matches) {
+                entities.push(...matches);
+            }
+        }
+
+        return [...new Set(entities)];
+    }
+
+    /**
      * Get memory context for a query
      */
     async getMemoryContext(query, options = {}) {

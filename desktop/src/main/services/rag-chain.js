@@ -4,6 +4,7 @@ import { chatWithRAG } from './ai-service-client.js';
 import { getMemoryManager } from './memory-manager.js';
 import { Document } from '@langchain/core/documents';
 import logger from '../utils/logger.js';
+import { buildSourceFilter, buildMultiSourceFilter, SOURCE_TYPES } from './source-types.js';
 
 /**
  * RAG Chain for question answering with retrieval
@@ -52,20 +53,38 @@ class RAGChain {
                 filters = {},
                 maxContextItems = this.options.k,
                 includeMemory = this.options.useMemory,
+                sourceType = SOURCE_TYPES.ALL, // Add source type parameter
             } = options;
 
+            // Build source filter
+            let sourceFilter = {};
+            if (sourceType && sourceType !== SOURCE_TYPES.ALL) {
+                sourceFilter = buildSourceFilter(sourceType);
+            }
+
+            // Merge with existing filters
+            const mergedFilters = { ...filters, ...sourceFilter };
+
             // Step 1: Generate query embedding
-            logger.debug(`RAG query: "${query.substring(0, 50)}..."`);
+            logger.debug(`RAG query: "${query.substring(0, 50)}..." with source filter: ${sourceType}`);
             const embeddingResult = await generateEmbedding(query);
             const queryEmbedding = embeddingResult.embedding;
 
-            // Step 2: Retrieve relevant documents
+            // Step 2: Retrieve relevant documents with source filter
             const retrievedDocs = await this.retriever.getRelevantDocuments(queryEmbedding);
 
-            // Apply additional filters if provided
+            // Apply source type filter if specified
             let filteredDocs = retrievedDocs;
-            if (Object.keys(filters).length > 0) {
+            if (sourceType && sourceType !== SOURCE_TYPES.ALL) {
                 filteredDocs = retrievedDocs.filter(doc => {
+                    const docSourceType = doc.metadata?.source_type;
+                    return docSourceType === sourceType;
+                });
+            }
+
+            // Apply additional filters if provided
+            if (Object.keys(filters).length > 0) {
+                filteredDocs = filteredDocs.filter(doc => {
                     for (const [key, value] of Object.entries(filters)) {
                         if (doc.metadata[key] !== value) {
                             return false;

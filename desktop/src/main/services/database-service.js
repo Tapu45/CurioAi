@@ -2,6 +2,7 @@ import { insertActivity, insertSummary, insertEmbedding, getActivityById } from 
 import { storeEmbedding, querySimilarEmbeddings } from '../storage/lancedb-client.js';
 import { createNode, createRelationship, getRelatedNodes } from '../storage/graph-client.js';
 import logger from '../utils/logger.js';
+import { mapActivitySourceType } from '../utils/source-type-mapper.js';
 
 // Store complete activity with AI processing results
 async function storeActivityWithAI(activity, aiResult) {
@@ -23,21 +24,27 @@ async function storeActivityWithAI(activity, aiResult) {
             logger.info(`Summary stored in SQLite: ${summaryId}`);
         }
 
+        // Map activity source type
+        const sourceType = mapActivitySourceType(activity.source_type || 'other');
+
         // 3. Store embedding in LanceDB
         if (aiResult.embedding && summaryId) {
             try {
+                // Update the embedding metadata to include source_type
+                const embeddingMetadata = {
+                    activity_id: activityId,
+                    summary_id: summaryId,
+                    title: activity.title,
+                    source_type: sourceType,
+                    complexity: aiResult.summary.complexity,
+                    sentiment: aiResult.summary.sentiment,
+                };
+
                 await storeEmbedding({
                     id: `embedding_${summaryId}`,
                     embedding: aiResult.embedding.embedding,
                     document: aiResult.summary.summary,
-                    metadata: {
-                        activity_id: activityId,
-                        summary_id: summaryId,
-                        title: activity.title,
-                        source_type: activity.source_type,
-                        complexity: aiResult.summary.complexity,
-                        sentiment: aiResult.summary.sentiment,
-                    },
+                    metadata: embeddingMetadata,
                 });
                 logger.info(`Embedding stored in LanceDB: ${summaryId}`);
 
@@ -72,6 +79,7 @@ async function storeActivityWithAI(activity, aiResult) {
         throw error;
     }
 }
+
 
 // Store concepts in Neo4j graph
 async function storeConceptsInGraph(activityId, concepts, activity) {

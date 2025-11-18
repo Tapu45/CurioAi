@@ -1,6 +1,10 @@
 import { getReActAgent } from './react-agent.js';
 import { RAGSearchTool } from './tools/rag-search-tool.js';
 import { FileSearchTool } from './tools/file-search-tool.js';
+import { ImageAnalysisTool } from './tools/image-analysis-tool.js';
+import { StructuredExtractionTool } from './tools/structured-extraction-tool.js';
+import { FileSystemTool } from './tools/file-system-tool.js';
+import { DeepExtractionTool } from './tools/deep-extraction-tool.js';
 import logger from '../../utils/logger.js';
 
 /**
@@ -43,16 +47,28 @@ class AgentManager {
      * Register basic tools
      */
     async registerBasicTools() {
-        // RAG Search Tool
+        // Basic tools
         const ragSearchTool = new RAGSearchTool();
         await ragSearchTool.initialize();
         this.registerTool(ragSearchTool);
 
-        // File Search Tool
         const fileSearchTool = new FileSearchTool();
         this.registerTool(fileSearchTool);
 
-        logger.info('Basic tools registered');
+        // Advanced tools
+        const imageAnalysisTool = new ImageAnalysisTool();
+        this.registerTool(imageAnalysisTool);
+
+        const structuredExtractionTool = new StructuredExtractionTool();
+        this.registerTool(structuredExtractionTool);
+
+        const fileSystemTool = new FileSystemTool();
+        this.registerTool(fileSystemTool);
+
+        const deepExtractionTool = new DeepExtractionTool();
+        this.registerTool(deepExtractionTool);
+
+        logger.info('All tools registered (basic + advanced)');
     }
 
     /**

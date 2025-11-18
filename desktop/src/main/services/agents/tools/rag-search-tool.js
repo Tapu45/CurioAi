@@ -54,7 +54,7 @@ export class RAGSearchTool extends BaseTool {
             const {
                 query,
                 maxResults = 5,
-                sourceType = 'all',
+                sourceType = 'all', // Add source type parameter
             } = params;
 
             // Build filters
@@ -63,10 +63,11 @@ export class RAGSearchTool extends BaseTool {
                 filters.source_type = sourceType;
             }
 
-            // Invoke RAG chain
+            // Invoke RAG chain with source filter
             const result = await this.ragChain.invoke(query, {
                 filters,
                 maxContextItems: maxResults,
+                sourceType, // Pass source type
             });
 
             // Format for agent

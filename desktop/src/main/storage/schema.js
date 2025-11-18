@@ -70,6 +70,7 @@ export const files = sqliteTable('files', {
     hash: text('hash'), // SHA-256 for deduplication
     extractedText: text('extracted_text'),
     metadata: text('metadata'), // JSON string
+    sourceType: text('source_type').notNull(),
     processedAt: text('processed_at'),
     createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
     updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),

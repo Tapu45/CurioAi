@@ -116,11 +116,14 @@ async function createRetriever(options = {}) {
 
         return {
             vectorStore,
-            async getRelevantDocuments(queryEmbedding) {
+            async getRelevantDocuments(queryEmbedding, filters = {}) {
+                // Merge filters
+                const mergedFilters = filter ? { ...filter, ...filters } : filters;
+
                 const results = await vectorStore.similaritySearchWithScore(
                     queryEmbedding,
                     k * 2, // Get more to filter by score
-                    filter
+                    Object.keys(mergedFilters).length > 0 ? mergedFilters : null
                 );
 
                 // Filter by score threshold

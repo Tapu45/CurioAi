@@ -2,6 +2,8 @@ import { getQueryRouter } from './query-router.js';
 import { getAgentManager } from './agent-manager.js';
 import { getRAGChain } from '../rag-chain.js';
 import logger from '../../utils/logger.js';
+import { SOURCE_TYPES, buildSourceFilter } from '../source-types.js';
+import { getQueryExamplesHandler } from './query-examples-handler.js'; // Add import at top
 
 /**
  * Hybrid Query Handler - Routes queries to RAG or Agent
@@ -28,12 +30,30 @@ class HybridQueryHandler {
     }
 
     /**
-     * Handle query - route to RAG or Agent
+     * Handle query - route to RAG or Agent, with examples
      */
     async handleQuery(query, options = {}) {
         try {
+            // Check for query examples first
+            const queryExamplesHandler = getQueryExamplesHandler();
+            const exampleResult = await queryExamplesHandler.processQuery(query);
+
+            if (exampleResult) {
+                logger.info('Using query example handler');
+                return {
+                    ...exampleResult,
+                    method: 'agent-example',
+                    sourceType: options.sourceType || SOURCE_TYPES.ALL,
+                };
+            }
+
+            const {
+                sourceType = SOURCE_TYPES.ALL, // Add source type
+                ...otherOptions
+            } = options;
+
             // Route query
-            const routing = await this.queryRouter.routeQuery(query, options);
+            const routing = await this.queryRouter.routeQuery(query, { ...otherOptions, sourceType });
 
             let result;
 
@@ -47,7 +67,8 @@ class HybridQueryHandler {
 
                 const agentResult = await this.agentManager.processQuery(query, {
                     ...routing.options,
-                    ...options,
+                    sourceType, // Pass source type to agent
+                    ...otherOptions,
                 });
 
                 result = {
@@ -57,6 +78,7 @@ class HybridQueryHandler {
                     iterations: agentResult.iterations || 0,
                     routing: routing.classification,
                     sources: this.extractSourcesFromToolCalls(agentResult.toolCalls),
+                    sourceType, // Include in result
                 };
             } else {
                 // Use RAG for simple queries
@@ -67,8 +89,9 @@ class HybridQueryHandler {
                 }
 
                 const ragResult = await this.ragChain.invoke(query, {
-                    filters: options.filters || {},
-                    maxContextItems: options.maxContextItems || 5,
+                    filters: otherOptions.filters || {},
+                    maxContextItems: otherOptions.maxContextItems || 5,
+                    sourceType, // Pass source type
                 });
 
                 result = {
@@ -78,6 +101,7 @@ class HybridQueryHandler {
                     contextUsed: ragResult.contextUsed || 0,
                     confidence: ragResult.confidence || 0,
                     routing: routing.classification,
+                    sourceType, // Include in result
                 };
             }
 

@@ -7,6 +7,8 @@ import logger from '../utils/logger.js';
 import { registerSyncHandlers } from './sync-handlers.js';
 import { getHybridQueryHandler } from '../services/agents/hybrid-query-handler.js';
 import { getAgentManager } from '../services/agents/agent-manager.js';
+import { getAgentStatusTracker } from '../services/agents/agent-status-tracker.js';
+import { getMainWindow } from '../windows/main-window.js';
 
 // Activity handlers
 function registerActivityHandlers() {
@@ -325,18 +327,13 @@ function registerChatHandlers() {
 
     ipcMain.handle(CHANNELS.CHAT.SEND_MESSAGE, async (event, message, options = {}) => {
         try {
-            const { sendChatMessage } = await import('../services/chat-service.js');
-
-            // Check if streaming is requested
-            if (options.streaming) {
-                // For now, return non-streaming but mark for future enhancement
-                const response = await sendChatMessage(message, { ...options, streaming: false });
-                return response;
-            }
-
-            return await sendChatMessage(message, options);
+            const { handleChatMessage } = await import('../services/chat-service.js');
+            return await handleChatMessage(message, {
+                ...options,
+                sourceType: options.sourceType || 'all', // Default to all
+            });
         } catch (error) {
-            logger.error('Error sending chat message:', error);
+            logger.error('Error in chat handler:', error);
             throw error;
         }
     });
@@ -667,6 +664,38 @@ function registerIpcHandlers() {
     registerSyncHandlers();
     registerDialogHandlers();
     registerAgentHandlers();
+
+    // Agent status event forwarding
+    const statusTracker = getAgentStatusTracker();
+
+    statusTracker.on('status', (data) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow) {
+            mainWindow.webContents.send('agent:status-update', data);
+        }
+    });
+
+    statusTracker.on('reasoning', (data) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow) {
+            mainWindow.webContents.send('agent:reasoning-update', data);
+        }
+    });
+
+    statusTracker.on('toolCall', (data) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow) {
+            mainWindow.webContents.send('agent:tool-call-update', data);
+        }
+    });
+
+    statusTracker.on('progress', (data) => {
+        const mainWindow = getMainWindow();
+        if (mainWindow) {
+            mainWindow.webContents.send('agent:progress-update', data);
+        }
+    });
+
     logger.info('All IPC handlers registered');
 }
 

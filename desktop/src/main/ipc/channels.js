@@ -98,6 +98,10 @@ export const CHANNELS = {
         CHAT: 'agent:chat',
         STATUS: 'agent:status',
         TOOL_EXECUTE: 'agent:tool:execute',
+        STATUS_UPDATE: 'agent:status-update', // Event
+        REASONING_UPDATE: 'agent:reasoning-update', // Event
+        TOOL_CALL_UPDATE: 'agent:tool-call-update', // Event
+        PROGRESS_UPDATE: 'agent:progress-update', // Event
     },
 };
 

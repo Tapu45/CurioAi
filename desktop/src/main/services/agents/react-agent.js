@@ -5,6 +5,10 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { getMemoryManager } from '../../memory-manager.js';
 import logger from '../../utils/logger.js';
 import { getAIServiceURL } from '../ai-service-client.js';
+import { getAgentStatusTracker } from './agent-status-tracker.js';
+import { getPerformanceOptimizer } from './performance-optimizer.js';
+import { getErrorHandler } from './error-handler.js';
+
 
 /**
  * ReAct Agent Implementation using LangChain
@@ -115,19 +119,36 @@ Thought: {agent_scratchpad}`;
      * Process a query with the agent
      */
     async processQuery(query, options = {}) {
+        const statusTracker = getAgentStatusTracker();
+        const performanceOptimizer = getPerformanceOptimizer();
+        const errorHandler = getErrorHandler();
+
         try {
             if (!this.executor) {
                 await this.initialize();
             }
 
-            // Get memory context
+            // Start tracking
+            statusTracker.startQuery(query);
+            statusTracker.addReasoningStep({
+                type: 'thought',
+                content: 'Analyzing query and determining approach...',
+            });
+
+            // Get memory context with caching
             let memoryContext = '';
             if (this.memoryManager && options.useMemory !== false) {
                 try {
-                    memoryContext = await this.memoryManager.getMemoryContext(query, {
-                        useBuffer: true,
-                        useVector: false, // Don't use vector memory in agent (tools handle retrieval)
-                    });
+                    const getMemory = performanceOptimizer.lazyLoad(
+                        `memory_${query.substring(0, 50)}`,
+                        async () => {
+                            return await this.memoryManager.getMemoryContext(query, {
+                                useBuffer: true,
+                                useVector: false,
+                            });
+                        }
+                    );
+                    memoryContext = await getMemory();
                 } catch (error) {
                     logger.debug('Error getting memory context:', error.message);
                 }
@@ -138,11 +159,43 @@ Thought: {agent_scratchpad}`;
                 ? `${memoryContext}\n\nUser Question: ${query}`
                 : query;
 
-            // Execute agent
-            const result = await this.executor.invoke({
-                input,
-                chat_history: options.chatHistory || '',
+            statusTracker.updateProgress(20, 'executing');
+            statusTracker.addReasoningStep({
+                type: 'action',
+                content: 'Executing agent with tools...',
             });
+
+            // Execute agent with timeout and error handling
+            const timeout = options.timeout || 60000;
+            const result = await errorHandler.retryWithBackoff(
+                () => performanceOptimizer.executeWithTimeout(
+                    () => this.executor.invoke({
+                        input,
+                        chat_history: options.chatHistory || '',
+                    }),
+                    timeout,
+                    'Agent execution timeout'
+                ),
+                2, // Max 2 retries
+                2000 // 2 second delay
+            );
+
+            // Track tool calls from intermediate steps
+            if (result.intermediateSteps) {
+                for (const step of result.intermediateSteps) {
+                    if (step[0]?.tool) {
+                        statusTracker.addToolCall({
+                            tool: step[0].tool,
+                            input: step[0].toolInput,
+                            status: 'executing',
+                        });
+
+                        // Update progress based on steps
+                        const progress = 20 + (result.intermediateSteps.indexOf(step) + 1) * 60 / result.intermediateSteps.length;
+                        statusTracker.updateProgress(progress);
+                    }
+                }
+            }
 
             // Save to memory
             if (this.memoryManager && options.useMemory !== false) {
@@ -153,7 +206,7 @@ Thought: {agent_scratchpad}`;
                 }
             }
 
-            // Extract tool usage from intermediate steps
+            // Extract tool usage
             const toolCalls = [];
             if (result.intermediateSteps) {
                 for (const step of result.intermediateSteps) {
@@ -167,14 +220,40 @@ Thought: {agent_scratchpad}`;
                 }
             }
 
+            statusTracker.addReasoningStep({
+                type: 'final',
+                content: 'Query completed successfully',
+            });
+            statusTracker.completeQuery({
+                answer: result.output,
+                toolCalls,
+            });
+
             return {
                 answer: result.output,
                 toolCalls,
                 iterations: result.intermediateSteps?.length || 0,
+                reasoningSteps: statusTracker.reasoningSteps,
             };
         } catch (error) {
+            // Enhanced error handling
+            const userMessage = errorHandler.formatUserError(error, {
+                operation: 'agent query processing',
+            });
+
+            if (error.message === 'Agent execution timeout') {
+                statusTracker.error(new Error('timeout'));
+                return {
+                    answer: userMessage,
+                    toolCalls: [],
+                    iterations: 0,
+                    error: 'timeout',
+                };
+            }
+
+            statusTracker.error(error);
             logger.error('Error processing query with agent:', error);
-            throw error;
+            throw new Error(userMessage);
         }
     }
 }

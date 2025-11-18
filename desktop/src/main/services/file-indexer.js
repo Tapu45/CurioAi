@@ -6,7 +6,8 @@ import { insertFile, getFileByHash, getFileByPath, insertFileChunk } from '../st
 import { storeEmbedding } from '../storage/lancedb-client.js';
 import { generateEmbedding } from './ai-service-client.js';
 import logger from '../utils/logger.js';
-import { loadDocument } from './llama-index/llama-index-loader.js';
+import { loadDocument } from './llama-index/document-loader.js';
+import { mapFileTypeToSourceType } from '../utils/source-type.js';
 
 // Chunking configuration
 const CHUNK_SIZE = 1000; // characters per chunk
@@ -64,7 +65,7 @@ async function indexFile(filePath, options = {}) {
             forceReindex = false,
             generateEmbeddings = true,
             deepExtraction = false,
-            useLlamaIndex = false, // Add this option
+            useLlamaIndex = false,
         } = options;
 
         // Check if file exists
@@ -115,7 +116,6 @@ async function indexFile(filePath, options = {}) {
                 });
 
                 if (llamaindexDoc) {
-                    // Use LlamaIndex document content
                     extracted.content = llamaindexDoc.pageContent;
                     extracted.metadata = {
                         ...extracted.metadata,
@@ -125,20 +125,21 @@ async function indexFile(filePath, options = {}) {
                 }
             } catch (llamaindexError) {
                 logger.warn(`LlamaIndex loading failed, using fallback: ${llamaindexError.message}`);
-                // Continue with regular extraction
             }
         }
 
         if (!extracted || !extracted.content || extracted.content.trim().length === 0) {
             logger.debug(`No content extracted from: ${path.basename(filePath)}`);
-            // Still store file metadata even if no content
         }
 
         // Determine file type
         const fileType = extracted.extension || path.extname(filePath).replace('.', '') || 'unknown';
         const mimeType = extracted.fileType || 'application/octet-stream';
 
-        // Store file in database
+        // Determine source type
+        const sourceType = mapFileTypeToSourceType(fileType, mimeType);
+
+        // Store file in database (with source_type)
         const fileId = await insertFile({
             path: filePath,
             name: path.basename(filePath),
@@ -148,6 +149,7 @@ async function indexFile(filePath, options = {}) {
             hash,
             extractedText: extracted.content || '',
             metadata: JSON.stringify(extracted.metadata || {}),
+            sourceType, // Add source type
             processedAt: new Date().toISOString(),
         });
 
@@ -188,6 +190,7 @@ async function indexFile(filePath, options = {}) {
                                         file_name: path.basename(filePath),
                                         file_type: fileType,
                                         title: extracted.title || path.basename(filePath),
+                                        source_type: sourceType,
                                     },
                                 });
                             }
