@@ -17,6 +17,7 @@ from src.services.summarizer import summarize_content
 from src.services.embedding import generate_embedding
 from src.services.concept_extractor import extract_concepts
 from src.utils.logger import setup_logger
+from src.services.entity_extractor_enhanced import extract_entities_enhanced
 
 from src.services.vision.image_analyzer import analyze_image
 from src.services.extraction.structured_extractor import extract_structured_data
@@ -45,6 +46,20 @@ from src.services.activity_classifier_ml import (
     classify_activity_ml,
     batch_classify_activities,
     should_use_ml_classifier,
+)
+
+from src.services.embedding_service_v2 import (
+    generate_embedding,
+    batch_generate_embeddings,
+    get_embedding_model_for_tier,
+    get_model_dimension,
+)
+
+from src.services.activity_insights import (
+    generate_daily_summary_ai,
+    generate_weekly_insights_ai,
+    identify_learning_gaps_ai,
+    suggest_focus_areas_ai,
 )
 
 logger = setup_logger()
@@ -76,13 +91,36 @@ async def get_embedding(request: EmbeddingRequest):
 
 @router.post("/concepts", response_model=ExtractConceptsResponse)
 async def get_concepts(request: ExtractConceptsRequest):
-    """Extract concepts and entities from text"""
+    """Extract concepts and entities from text (enhanced)"""
     try:
-        result = await extract_concepts(request.text, min_confidence=request.min_confidence)
+        result = await extract_entities_enhanced(
+            request.text,
+            min_confidence=request.min_confidence
+        )
         return result
     except Exception as e:
         logger.error(f"Error in concepts endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class ExtractEntitiesRequest(BaseModel):
+    text: str
+    extract_types: Optional[List[str]] = None  # ['movie', 'game', 'book', etc.]
+    min_confidence: Optional[float] = 0.5
+
+@router.post("/extract-entities", response_model=ExtractConceptsResponse)
+async def extract_entities(request: ExtractEntitiesRequest):
+    """Extract specialized entities (movies, games, books, etc.)"""
+    try:
+        result = await extract_entities_enhanced(
+            request.text,
+            min_confidence=request.min_confidence,
+            extract_types=request.extract_types
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in extract-entities endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/process", response_model=ProcessContentResponse)
 async def process_content(request: ProcessContentRequest):
@@ -486,3 +524,95 @@ async def get_classifier_status():
             "tier": "UNKNOWN",
             "method": "rule-based",
         }
+
+class BatchEmbeddingRequest(BaseModel):
+    texts: List[str] = Field(..., description="List of texts to generate embeddings for")
+    model: Optional[str] = Field(None, description="Embedding model to use")
+    tier: Optional[str] = Field(None, description="System tier (LOW_END, MID_RANGE, HIGH_END, PREMIUM)")
+
+class BatchEmbeddingResponse(BaseModel):
+    embeddings: List[EmbeddingResponse]
+
+# Update existing embedding endpoint to use v2
+@router.post("/embedding", response_model=EmbeddingResponse)
+async def get_embedding(request: EmbeddingRequest):
+    """Generate embedding for text"""
+    try:
+        result = await generate_embedding(request.text, model=request.model)
+        return result
+    except Exception as e:
+        logger.error(f"Error in embedding endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Add batch embedding endpoint
+@router.post("/batch-embeddings", response_model=BatchEmbeddingResponse)
+async def batch_embeddings(request: BatchEmbeddingRequest):
+    """Generate embeddings for multiple texts in batch"""
+    try:
+        results = await batch_generate_embeddings(
+            request.texts,
+            model=request.model,
+            tier=request.tier
+        )
+        return BatchEmbeddingResponse(embeddings=results)
+    except Exception as e:
+        logger.error(f"Error in batch-embeddings endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Add model info endpoint
+@router.get("/embedding/model-info")
+async def get_embedding_model_info(tier: Optional[str] = None):
+    """Get current embedding model information"""
+    try:
+        model_manager = get_model_manager()
+        if tier:
+            model = get_embedding_model_for_tier(tier)
+        else:
+            tier = model_manager.get_recommended_tier() if not settings.MODEL_TIER else settings.MODEL_TIER
+            model = get_embedding_model_for_tier(tier)
+        
+        dimension = get_model_dimension()
+        
+        return {
+            "tier": tier,
+            "model": model.get_sentence_embedding_dimension() if hasattr(model, 'get_sentence_embedding_dimension') else "unknown",
+            "dimension": dimension,
+        }
+    except Exception as e:
+        logger.error(f"Error getting embedding model info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class GenerateInsightsRequest(BaseModel):
+    activities_data: Dict[str, Any] = Field(..., description="Activities data for insights")
+    insight_type: str = Field(..., description="Type: 'daily', 'weekly', 'gaps', 'focus'")
+
+class GenerateInsightsResponse(BaseModel):
+    insights: Dict[str, Any]
+    generated_at: str
+
+# Add endpoints
+@router.post("/generate-insights", response_model=GenerateInsightsResponse)
+async def generate_insights(request: GenerateInsightsRequest):
+    """Generate AI-powered insights from activities"""
+    try:
+        insight_type = request.insight_type
+        
+        if insight_type == 'daily':
+            insights = await generate_daily_summary_ai(request.activities_data)
+        elif insight_type == 'weekly':
+            insights = await generate_weekly_insights_ai(request.activities_data)
+        elif insight_type == 'gaps':
+            gaps_data = request.activities_data.get('gaps', [])
+            insights = await identify_learning_gaps_ai(gaps_data)
+        elif insight_type == 'focus':
+            insights = await suggest_focus_areas_ai(request.activities_data)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown insight type: {insight_type}")
+        
+        return GenerateInsightsResponse(
+            insights=insights,
+            generated_at=datetime.now().isoformat()
+        )
+    except Exception as e:
+        logger.error(f"Error generating insights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

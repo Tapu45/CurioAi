@@ -916,6 +916,103 @@ async function getSessionById(sessionId) {
     }
 }
 
+// Add this function before exports
+async function insertActivityEntity(entity) {
+    try {
+        await dbClient.execute(`
+            INSERT INTO activity_entities (
+                id, activity_id, session_id, entity_type, entity_name, entity_value, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+            entity.id,
+            entity.activity_id || null,
+            entity.session_id || null,
+            entity.entity_type,
+            entity.entity_name,
+            entity.entity_value || null,
+            entity.confidence || 0.5,
+        ]);
+        logger.debug(`Activity entity stored: ${entity.entity_name} (${entity.entity_type})`);
+        return entity.id;
+    } catch (error) {
+        logger.error('Error inserting activity entity:', error);
+        throw error;
+    }
+}
+
+async function getActivityEntities(filters = {}) {
+    try {
+        let query = 'SELECT * FROM activity_entities WHERE 1=1';
+        const params = [];
+
+        if (filters.activity_id) {
+            query += ' AND activity_id = ?';
+            params.push(filters.activity_id);
+        }
+
+        if (filters.session_id) {
+            query += ' AND session_id = ?';
+            params.push(filters.session_id);
+        }
+
+        if (filters.entity_type) {
+            query += ' AND entity_type = ?';
+            params.push(filters.entity_type);
+        }
+
+        query += ' ORDER BY created_at DESC';
+
+        if (filters.limit) {
+            query += ' LIMIT ?';
+            params.push(filters.limit);
+        }
+
+        const result = await dbClient.execute(query, params);
+        return result.rows || [];
+    } catch (error) {
+        logger.error('Error getting activity entities:', error);
+        return [];
+    }
+}
+
+// Add this function
+async function getSessions(filters = {}) {
+    try {
+        let query = 'SELECT * FROM activity_sessions WHERE 1=1';
+        const params = [];
+
+        if (filters.startDate) {
+            query += ' AND start_time >= ?';
+            params.push(filters.startDate);
+        }
+
+        if (filters.endDate) {
+            query += ' AND end_time <= ?';
+            params.push(filters.endDate);
+        }
+
+        if (filters.activity_type) {
+            query += ' AND activity_type = ?';
+            params.push(filters.activity_type);
+        }
+
+        query += ' ORDER BY start_time DESC';
+
+        if (filters.limit) {
+            query += ' LIMIT ?';
+            params.push(filters.limit);
+        }
+
+        const result = await dbClient.execute(query, params);
+        return result.rows || [];
+    } catch (error) {
+        logger.error('Error getting sessions:', error);
+        return [];
+    }
+}
+
+
+
 export {
     initializeDatabase,
     getDatabase,
@@ -947,4 +1044,7 @@ export {
     getActiveSession,
     getSessionById,
     getActivitiesBySession,
+    insertActivityEntity,
+    getActivityEntities,
+    getSessions,
 };

@@ -2,6 +2,9 @@ import { querySimilarEmbeddings, getAllEmbeddings } from '../storage/lancedb-cli
 import { getAppConfig } from '../utils/config-manager.js';
 import logger from '../utils/logger.js';
 import { createRelationship, queryGraph, getNodeById } from '../storage/graph-client.js';
+import { getActivities, getActivityById, getActivitiesBySession } from '../storage/sqlite-db.js';
+import { extractConcepts } from './ai-service-client.js';
+import { insertActivityEntity } from '../storage/sqlite-db.js';
 
 // Cosine similarity calculation
 function cosineSimilarity(vecA, vecB) {
@@ -34,6 +37,419 @@ function calculateSimilarity(embedding1, embedding2) {
     } catch (error) {
         logger.error('Error calculating similarity:', error);
         return 0;
+    }
+}
+
+/**
+ * Extract entities from activity using enhanced NER
+ * @param {Object} activity - Activity object
+ * @returns {Promise<Array>} - Array of extracted entities
+ */
+async function extractEntitiesFromActivity(activity) {
+    try {
+        const text = `${activity.title || ''} ${activity.content || ''}`.trim();
+
+        if (!text || text.length < 10) {
+            return [];
+        }
+
+        // Use AI service to extract entities
+        const concepts = await extractConcepts(text, 0.5);
+
+        if (!concepts || !concepts.concepts) {
+            return [];
+        }
+
+        // Map concepts to entities
+        const entities = concepts.concepts.map(concept => ({
+            entityType: mapConceptToEntityType(concept.label),
+            entityName: concept.text,
+            confidence: concept.confidence,
+            start: concept.start,
+            end: concept.end,
+        }));
+
+        // Extract specialized entities (movies, games, books, projects)
+        const specialized = extractSpecializedEntities(activity);
+        entities.push(...specialized);
+
+        return entities;
+    } catch (error) {
+        logger.error('Error extracting entities from activity:', error);
+        return [];
+    }
+}
+
+/**
+ * Map concept labels to entity types
+ */
+function mapConceptToEntityType(conceptLabel) {
+    const mapping = {
+        'PERSON': 'person',
+        'ORGANIZATION': 'organization',
+        'TECH': 'topic',
+        'LOCATION': 'location',
+        'OTHER': 'topic',
+    };
+    return mapping[conceptLabel] || 'topic';
+}
+
+/**
+ * Extract specialized entities from activity metadata
+ */
+function extractSpecializedEntities(activity) {
+    const entities = [];
+
+    // Movie/Video
+    if (activity.activity_type === 'watching' && activity.video_id) {
+        entities.push({
+            entityType: 'video',
+            entityName: activity.title || 'Unknown Video',
+            confidence: 0.9,
+            metadata: {
+                videoId: activity.video_id,
+                channel: activity.metadata?.channel,
+            },
+        });
+    }
+
+    // Game
+    if (activity.activity_type === 'gaming' && activity.game_name) {
+        entities.push({
+            entityType: 'game',
+            entityName: activity.game_name,
+            confidence: 0.9,
+            metadata: {
+                platform: activity.metadata?.platform,
+            },
+        });
+    }
+
+    // PDF/Book
+    if (activity.activity_type === 'reading' && activity.file_path) {
+        entities.push({
+            entityType: 'pdf',
+            entityName: activity.title || activity.file_path,
+            confidence: 0.9,
+            metadata: {
+                filePath: activity.file_path,
+            },
+        });
+    }
+
+    // Project
+    if (activity.activity_type === 'coding' && activity.project_name) {
+        entities.push({
+            entityType: 'project',
+            entityName: activity.project_name,
+            confidence: 0.9,
+            metadata: {
+                projectType: activity.metadata?.projectType,
+                frameworks: activity.metadata?.frameworks,
+            },
+        });
+    }
+
+    return entities;
+}
+
+/**
+ * Store entities in activity_entities table
+ */
+async function storeActivityEntities(activityId, sessionId, entities) {
+    try {
+        const { v4: uuidv4 } = await import('uuid');
+
+        for (const entity of entities) {
+            const entityId = uuidv4();
+            await insertActivityEntity({
+                id: entityId,
+                activity_id: activityId,
+                session_id: sessionId,
+                entity_type: entity.entityType,
+                entity_name: entity.entityName,
+                entity_value: JSON.stringify(entity.metadata || {}),
+                confidence: entity.confidence || 0.5,
+            });
+        }
+
+        logger.debug(`Stored ${entities.length} entities for activity ${activityId}`);
+    } catch (error) {
+        logger.error('Error storing activity entities:', error);
+    }
+}
+
+/**
+ * Build learning flow relationships: WATCHED → LEARNED → APPLIED
+ */
+async function buildLearningFlowRelationships(activityId, activity) {
+    try {
+        const activityType = activity.activity_type || activity.source_type;
+        const concepts = await extractEntitiesFromActivity(activity);
+
+        // Create activity node if not exists
+        await createNode({
+            label: 'Activity',
+            properties: {
+                id: `activity_${activityId}`,
+                title: activity.title || activity.window_title,
+                activity_type: activityType,
+                source_type: activity.source_type,
+                timestamp: activity.timestamp || activity.created_at,
+                session_id: activity.session_id,
+            },
+        });
+
+        // For watching activities, create WATCHED relationship to concepts
+        if (activityType === 'watching' || activityType === 'reading') {
+            for (const entity of concepts) {
+                if (entity.entityType === 'topic' || entity.entityType === 'video' || entity.entityType === 'pdf') {
+                    const conceptId = `concept_${entity.entityName.toLowerCase().replace(/\s+/g, '_')}`;
+
+                    // Create concept node
+                    await createNode({
+                        label: 'Concept',
+                        properties: {
+                            id: conceptId,
+                            name: entity.entityName,
+                            entity_type: entity.entityType,
+                            confidence: entity.confidence,
+                        },
+                    });
+
+                    // Create WATCHED or READ relationship
+                    await createRelationship({
+                        fromId: `activity_${activityId}`,
+                        fromLabel: 'Activity',
+                        toId: conceptId,
+                        toLabel: 'Concept',
+                        relationshipType: activityType === 'watching' ? 'WATCHED' : 'READ',
+                        properties: {
+                            confidence: entity.confidence,
+                            timestamp: activity.timestamp,
+                        },
+                    });
+                }
+            }
+        }
+
+        // For coding activities, create APPLIED relationship to concepts
+        if (activityType === 'coding') {
+            // Find concepts from previous watching/reading activities
+            const similarActivities = await findRelatedLearningActivities(activity);
+
+            for (const relatedActivity of similarActivities) {
+                const relatedConcepts = await extractEntitiesFromActivity(relatedActivity);
+
+                for (const concept of relatedConcepts) {
+                    if (concept.entityType === 'topic') {
+                        const conceptId = `concept_${concept.entityName.toLowerCase().replace(/\s+/g, '_')}`;
+
+                        // Check if this concept was learned from watching/reading
+                        const learnedFrom = await queryGraph('MATCH_LEARNED_FROM', {
+                            conceptId,
+                            activityType: ['watching', 'reading'],
+                        });
+
+                        if (learnedFrom.length > 0) {
+                            // Create APPLIED relationship
+                            await createRelationship({
+                                fromId: `activity_${activityId}`,
+                                fromLabel: 'Activity',
+                                toId: conceptId,
+                                toLabel: 'Concept',
+                                relationshipType: 'APPLIED',
+                                properties: {
+                                    confidence: concept.confidence,
+                                    timestamp: activity.timestamp,
+                                    learned_from: learnedFrom[0].activityId,
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Store entities in database
+        if (activity.session_id) {
+            await storeActivityEntities(activityId, activity.session_id, concepts);
+        }
+    } catch (error) {
+        logger.error('Error building learning flow relationships:', error);
+    }
+}
+
+/**
+ * Find related learning activities (watching/reading) for a coding activity
+ */
+async function findRelatedLearningActivities(codingActivity) {
+    try {
+        // Get activities from recent sessions (last 7 days)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const activities = await getActivities({
+            startDate: sevenDaysAgo.toISOString(),
+            activityType: ['watching', 'reading'],
+            limit: 50,
+        });
+
+        // Find similar activities using semantic search
+        const { findSimilarActivities } = await import('./semantic-search-service.js');
+        const similar = await findSimilarActivities(codingActivity.id, 10);
+
+        return similar.map(s => s.activityId).map(id =>
+            activities.find(a => a.id === id)
+        ).filter(Boolean);
+    } catch (error) {
+        logger.error('Error finding related learning activities:', error);
+        return [];
+    }
+}
+
+/**
+ * Build temporal relationships: BEFORE → AFTER
+ */
+async function buildTemporalRelationships(activityId, activity) {
+    try {
+        // Get previous activity in same session
+        if (!activity.session_id) {
+            return;
+        }
+
+        const sessionActivities = await getActivitiesBySession(activity.session_id);
+        const currentIndex = sessionActivities.findIndex(a => a.id === activityId);
+
+        if (currentIndex > 0) {
+            const previousActivity = sessionActivities[currentIndex - 1];
+
+            await createRelationship({
+                fromId: `activity_${previousActivity.id}`,
+                fromLabel: 'Activity',
+                toId: `activity_${activityId}`,
+                toLabel: 'Activity',
+                relationshipType: 'BEFORE',
+                properties: {
+                    time_gap_seconds: Math.floor(
+                        (new Date(activity.timestamp) - new Date(previousActivity.timestamp)) / 1000
+                    ),
+                    same_session: true,
+                },
+            });
+        }
+    } catch (error) {
+        logger.error('Error building temporal relationships:', error);
+    }
+}
+
+/**
+ * Build topic relationships: RELATED_TO, PREREQUISITE_OF
+ */
+async function buildTopicRelationships(conceptId1, conceptId2, similarity, metadata1, metadata2) {
+    try {
+        // RELATED_TO - concepts are similar
+        if (similarity >= 0.7) {
+            await createRelationship({
+                fromId: conceptId1,
+                fromLabel: 'Concept',
+                toId: conceptId2,
+                toLabel: 'Concept',
+                relationshipType: 'RELATED_TO',
+                properties: {
+                    similarity,
+                    source: 'embedding_similarity',
+                },
+            });
+        }
+
+        // PREREQUISITE_OF - if one concept appears before another consistently
+        const timestamp1 = metadata1.timestamp || metadata1.created_at;
+        const timestamp2 = metadata2.timestamp || metadata2.created_at;
+
+        if (timestamp1 && timestamp2) {
+            const date1 = new Date(timestamp1);
+            const date2 = new Date(timestamp2);
+
+            // If concept1 appears significantly earlier and they're related
+            if (date1 < date2 && (date2 - date1) > 7 * 24 * 60 * 60 * 1000 && similarity >= 0.6) {
+                await createRelationship({
+                    fromId: conceptId1,
+                    fromLabel: 'Concept',
+                    toId: conceptId2,
+                    toLabel: 'Concept',
+                    relationshipType: 'PREREQUISITE_OF',
+                    properties: {
+                        similarity,
+                        days_between: Math.floor((date2 - date1) / (24 * 60 * 60 * 1000)),
+                    },
+                });
+            }
+        }
+    } catch (error) {
+        logger.error('Error building topic relationships:', error);
+    }
+}
+
+/**
+ * Build project relationships: WORKED_ON, USED_IN
+ */
+async function buildProjectRelationships(activityId, activity) {
+    try {
+        if (activity.activity_type !== 'coding' || !activity.project_name) {
+            return;
+        }
+
+        const projectId = `project_${activity.project_name.toLowerCase().replace(/\s+/g, '_')}`;
+
+        // Create project node
+        await createNode({
+            label: 'Project',
+            properties: {
+                id: projectId,
+                name: activity.project_name,
+                project_type: activity.metadata?.projectType,
+                frameworks: activity.metadata?.frameworks || [],
+            },
+        });
+
+        // Create WORKED_ON relationship
+        await createRelationship({
+            fromId: `activity_${activityId}`,
+            fromLabel: 'Activity',
+            toId: projectId,
+            toLabel: 'Project',
+            relationshipType: 'WORKED_ON',
+            properties: {
+                timestamp: activity.timestamp,
+            },
+        });
+
+        // Create USED_IN relationships for frameworks
+        if (activity.metadata?.frameworks) {
+            for (const framework of activity.metadata.frameworks) {
+                const frameworkId = `framework_${framework.toLowerCase().replace(/\s+/g, '_')}`;
+
+                await createNode({
+                    label: 'Framework',
+                    properties: {
+                        id: frameworkId,
+                        name: framework,
+                    },
+                });
+
+                await createRelationship({
+                    fromId: projectId,
+                    fromLabel: 'Project',
+                    toId: frameworkId,
+                    toLabel: 'Framework',
+                    relationshipType: 'USED_IN',
+                    properties: {},
+                });
+            }
+        }
+    } catch (error) {
+        logger.error('Error building project relationships:', error);
     }
 }
 
@@ -362,21 +778,49 @@ async function buildKnowledgeGraph(options = {}) {
         conceptThreshold = 0.7,
         activityThreshold = 0.75,
         buildTopics = true,
+        buildLearningFlows = true,
         limit = 100,
     } = options;
 
+    const results = {
+        conceptRelationships: 0,
+        activityRelationships: 0,
+        topicClusters: 0,
+        learningFlows: 0,
+    };
+
+    // Build concept relationships
     const conceptRel = await buildConceptRelationships(conceptThreshold, limit);
+    results.conceptRelationships = conceptRel.relationshipsCreated;
+
+    // Build activity relationships
     const activityRel = await buildActivityRelationships(activityThreshold, limit);
-    let topicClusters = { clustersCreated: 0 };
+    results.activityRelationships = activityRel.relationshipsCreated;
+
+    // Build topic clusters
     if (buildTopics) {
-        topicClusters = await buildTopicClusters();
+        const topicClusters = await buildTopicClusters();
+        results.topicClusters = topicClusters.clustersCreated;
     }
 
-    return {
-        conceptRelationships: conceptRel.relationshipsCreated,
-        activityRelationships: activityRel.relationshipsCreated,
-        topicClusters: topicClusters.clustersCreated,
-    };
+    // Build learning flows for recent activities
+    if (buildLearningFlows) {
+        try {
+            const recentActivities = await getActivities({
+                limit: 50,
+                startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+            });
+
+            for (const activity of recentActivities) {
+                await buildActivityGraph(activity.id, activity);
+            }
+            results.learningFlows = recentActivities.length;
+        } catch (error) {
+            logger.error('Error building learning flows:', error);
+        }
+    }
+
+    return results;
 }
 
 
@@ -385,6 +829,10 @@ export {
     buildConceptRelationships,
     buildActivityRelationships,
     buildTopicClusters,
+    buildLearningFlowRelationships,
+    buildTemporalRelationships,
+    buildProjectRelationships,
+    extractEntitiesFromActivity,
     calculateSimilarity,
     getGraphStatistics,
 };

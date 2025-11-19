@@ -497,6 +497,83 @@ async function queryGraph(queryType, parameters = {}) {
             return results;
         }
 
+        if (queryType === 'MATCH_LEARNED_FROM') {
+            const { conceptId, activityType } = parameters;
+            const results = [];
+
+            if (graph.hasNode(conceptId)) {
+                const neighbors = graph.neighbors(conceptId);
+                for (const neighborId of neighbors) {
+                    const edge = graph.getEdgeAttributes(
+                        graph.edge(conceptId, neighborId) || graph.edge(neighborId, conceptId)
+                    );
+                    if (edge.type === 'WATCHED' || edge.type === 'READ') {
+                        const neighborData = graph.getNodeAttributes(neighborId);
+                        if (neighborData.label === 'Activity') {
+                            if (!activityType || activityType.includes(neighborData.activity_type)) {
+                                results.push({
+                                    activityId: neighborId,
+                                    relationshipType: edge.type,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        if (queryType === 'MATCH_APPLIED') {
+            const { conceptId } = parameters;
+            const results = [];
+
+            if (graph.hasNode(conceptId)) {
+                const neighbors = graph.neighbors(conceptId);
+                for (const neighborId of neighbors) {
+                    const edge = graph.getEdgeAttributes(
+                        graph.edge(conceptId, neighborId) || graph.edge(neighborId, conceptId)
+                    );
+                    if (edge.type === 'APPLIED') {
+                        const neighborData = graph.getNodeAttributes(neighborId);
+                        if (neighborData.label === 'Activity') {
+                            results.push({
+                                activityId: neighborId,
+                                timestamp: neighborData.timestamp,
+                            });
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        if (queryType === 'MATCH_PROJECT_ACTIVITIES') {
+            const { projectId } = parameters;
+            const results = [];
+
+            if (graph.hasNode(projectId)) {
+                const neighbors = graph.neighbors(projectId);
+                for (const neighborId of neighbors) {
+                    const edge = graph.getEdgeAttributes(
+                        graph.edge(projectId, neighborId) || graph.edge(neighborId, projectId)
+                    );
+                    if (edge.type === 'WORKED_ON') {
+                        const neighborData = graph.getNodeAttributes(neighborId);
+                        if (neighborData.label === 'Activity') {
+                            results.push({
+                                activityId: neighborId,
+                                timestamp: neighborData.timestamp,
+                            });
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
         return [];
     } catch (error) {
         logger.error('Error querying graph:', error);

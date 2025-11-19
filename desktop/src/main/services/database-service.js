@@ -3,6 +3,7 @@ import { storeEmbedding, querySimilarEmbeddings } from '../storage/lancedb-clien
 import { createNode, createRelationship, getRelatedNodes } from '../storage/graph-client.js';
 import logger from '../utils/logger.js';
 import { mapActivitySourceType } from '../utils/source-type-mapper.js';
+import { buildActivityGraph } from '../services/graph-builder.js';
 
 // Store complete activity with AI processing results
 async function storeActivityWithAI(activity, aiResult) {
@@ -33,8 +34,10 @@ async function storeActivityWithAI(activity, aiResult) {
                 // Update the embedding metadata to include source_type
                 const embeddingMetadata = {
                     activity_id: activityId,
+                    session_id: activity.session_id || '', // Add session_id
                     summary_id: summaryId,
                     title: activity.title,
+                    activity_type: activity.activity_type || activity.source_type, // Add activity_type
                     source_type: sourceType,
                     complexity: aiResult.summary.complexity,
                     sentiment: aiResult.summary.sentiment,
@@ -69,6 +72,15 @@ async function storeActivityWithAI(activity, aiResult) {
             }
         }
 
+        // NEW: Build graph relationships using graph-builder (non-blocking for overall operation)
+        try {
+            await buildActivityGraph(activityId, activity);
+            logger.debug(`Graph built for activity ${activityId}`);
+        } catch (error) {
+            logger.error('Error building graph for activity:', error);
+            // Do not fail the entire operation if graph build fails
+        }
+
         return {
             activityId,
             summaryId,
@@ -79,7 +91,6 @@ async function storeActivityWithAI(activity, aiResult) {
         throw error;
     }
 }
-
 
 // Store concepts in Neo4j graph
 async function storeConceptsInGraph(activityId, concepts, activity) {

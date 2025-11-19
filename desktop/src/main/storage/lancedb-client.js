@@ -3,27 +3,41 @@ import path from 'path';
 import { app } from 'electron';
 import logger from '../utils/logger.js';
 import fs from 'fs/promises';
+import axios from 'axios';
+import { getAppConfig } from '../utils/config-manager.js';
 
 let db = null;
 let table = null;
 const TABLE_NAME = 'knowledge_base';
-const EMBEDDING_DIMENSION = 384; // all-MiniLM-L6-v2 dimension
+
+// Get embedding dimension from AI service
+async function getEmbeddingDimension() {
+    try {
+        const config = getAppConfig();
+        const aiServiceURL = config.aiServiceURL || 'http://127.0.0.1:8000';
+
+        const response = await axios.get(`${aiServiceURL}/api/v1/embedding/model-info`, {
+            timeout: 2000,
+        });
+
+        return response.data?.dimension || 384; // Default to 384 if service unavailable
+    } catch (error) {
+        logger.warn('Could not get embedding dimension from AI service, using default 384');
+        return 384; // Default: all-MiniLM-L6-v2 dimension
+    }
+}
 
 // Initialize LanceDB
 async function initializeLanceDB() {
     try {
         const lancedbPath = path.join(app.getPath('userData'), 'data', 'lancedb');
-
-        // Ensure directory exists
         await fs.mkdir(lancedbPath, { recursive: true });
 
-        // Connect to LanceDB (creates if doesn't exist)
         db = await lancedb.connect(lancedbPath);
-
         logger.info('LanceDB initialized at:', lancedbPath);
         return db;
     } catch (error) {
-        logger.error('Failed to initialize LanceDB:', error instanceof Error ? error : new Error(String(error)));
+        logger.error('Failed to initialize LanceDB:', error);
         throw error;
     }
 }
@@ -35,20 +49,24 @@ async function getTable() {
     }
 
     try {
-        // Try to open existing table
         const tableNames = await db.tableNames();
         if (tableNames.includes(TABLE_NAME)) {
             table = await db.openTable(TABLE_NAME);
             logger.debug('LanceDB table retrieved:', TABLE_NAME);
         } else {
+            // Get embedding dimension
+            const dimension = await getEmbeddingDimension();
+
             // Create new table with schema
             const schema = {
                 id: 'string',
-                vector: `float32(${EMBEDDING_DIMENSION})`,
+                vector: `float32(${dimension})`,
                 document: 'string',
                 activity_id: 'int64',
+                session_id: 'string',
                 summary_id: 'int64',
                 title: 'string',
+                activity_type: 'string',
                 source_type: 'string',
                 complexity: 'string',
                 sentiment: 'float32',
@@ -58,11 +76,13 @@ async function getTable() {
             // Create empty table with initial data
             const initialData = [{
                 id: 'init',
-                vector: Array(EMBEDDING_DIMENSION).fill(0),
+                vector: Array(dimension).fill(0),
                 document: '',
                 activity_id: 0,
+                session_id: '',
                 summary_id: 0,
                 title: '',
+                activity_type: '',
                 source_type: '',
                 complexity: '',
                 sentiment: 0.0,
@@ -70,13 +90,12 @@ async function getTable() {
             }];
 
             table = await db.createTable(TABLE_NAME, initialData);
-            // Delete the initial row
             await table.delete('id = "init"');
 
-            logger.info('LanceDB table created:', TABLE_NAME);
+            logger.info(`LanceDB table created: ${TABLE_NAME} with dimension ${dimension}`);
         }
     } catch (error) {
-        logger.error('Failed to get/create LanceDB table:', error instanceof Error ? error : new Error(String(error)));
+        logger.error('Failed to get/create LanceDB table:', error);
         throw error;
     }
 
@@ -87,6 +106,7 @@ async function getTable() {
 async function storeEmbedding(embeddingData) {
     try {
         const tbl = await getTable();
+        const dimension = await getEmbeddingDimension();
 
         const {
             id,
@@ -96,8 +116,8 @@ async function storeEmbedding(embeddingData) {
         } = embeddingData;
 
         // Validate embedding dimension
-        if (embedding.length !== EMBEDDING_DIMENSION) {
-            throw new Error(`Embedding dimension mismatch: expected ${EMBEDDING_DIMENSION}, got ${embedding.length}`);
+        if (embedding.length !== dimension) {
+            throw new Error(`Embedding dimension mismatch: expected ${dimension}, got ${embedding.length}`);
         }
 
         // Prepare data for LanceDB
@@ -106,28 +126,28 @@ async function storeEmbedding(embeddingData) {
             vector: embedding,
             document: document || '',
             activity_id: metadata.activity_id ? parseInt(metadata.activity_id) : 0,
+            session_id: metadata.session_id || '',
             summary_id: metadata.summary_id ? parseInt(metadata.summary_id) : 0,
             title: metadata.title || '',
+            activity_type: metadata.activity_type || '',
             source_type: metadata.source_type || '',
             complexity: metadata.complexity || '',
             sentiment: metadata.sentiment || 0.0,
             timestamp: metadata.timestamp || new Date().toISOString(),
         }];
 
-        // Check if ID already exists, delete if so (upsert behavior)
+        // Upsert behavior
         try {
             await tbl.delete(`id = "${id}"`);
         } catch (error) {
             // Ignore if doesn't exist
         }
 
-        // Insert new data
         await tbl.add(data);
-
         logger.info(`Embedding stored in LanceDB: ${id}`);
         return true;
     } catch (error) {
-        logger.error('Error storing embedding in LanceDB:', error instanceof Error ? error : new Error(String(error)));
+        logger.error('Error storing embedding in LanceDB:', error);
         throw error;
     }
 }
@@ -136,24 +156,29 @@ async function storeEmbedding(embeddingData) {
 async function querySimilarEmbeddings(queryEmbedding, limit = 10, filters = {}) {
     try {
         const tbl = await getTable();
+        const dimension = await getEmbeddingDimension();
 
         // Validate query embedding dimension
-        if (queryEmbedding.length !== EMBEDDING_DIMENSION) {
-            throw new Error(`Query embedding dimension mismatch: expected ${EMBEDDING_DIMENSION}, got ${queryEmbedding.length}`);
+        if (queryEmbedding.length !== dimension) {
+            throw new Error(`Query embedding dimension mismatch: expected ${dimension}, got ${queryEmbedding.length}`);
         }
 
-        // Build filter predicate if filters provided
+        // Build filter predicate
         let predicate = null;
         if (Object.keys(filters).length > 0) {
             const filterParts = [];
             for (const [key, value] of Object.entries(filters)) {
                 if (value === null || value === undefined) {
-                    continue; // Skip null/undefined values
+                    continue;
                 }
                 if (typeof value === 'object' && value.$ne) {
                     filterParts.push(`${key} != ${typeof value.$ne === 'string' ? `"${value.$ne}"` : value.$ne}`);
                 } else if (typeof value === 'object' && value.$eq) {
                     filterParts.push(`${key} = ${typeof value.$eq === 'string' ? `"${value.$eq}"` : value.$eq}`);
+                } else if (typeof value === 'object' && value.$in) {
+                    // Support $in operator for multiple values
+                    const values = value.$in.map(v => typeof v === 'string' ? `"${v}"` : v).join(', ');
+                    filterParts.push(`${key} IN (${values})`);
                 } else {
                     filterParts.push(`${key} = ${typeof value === 'string' ? `"${value}"` : value}`);
                 }
@@ -163,7 +188,7 @@ async function querySimilarEmbeddings(queryEmbedding, limit = 10, filters = {}) 
             }
         }
 
-        // Perform vector search - only add .where() if predicate is not null
+        // Perform vector search
         let query = tbl.search(queryEmbedding).limit(limit);
         if (predicate !== null && predicate !== undefined) {
             query = query.where(predicate);
@@ -171,15 +196,18 @@ async function querySimilarEmbeddings(queryEmbedding, limit = 10, filters = {}) 
 
         const results = await query.toArray();
 
-        // Format results to match ChromaDB format
+        // Format results
         const formattedResults = results.map((row) => ({
             id: row.id,
-            distance: row._distance || 0, // LanceDB returns _distance
+            distance: row._distance || 0,
+            similarity: 1 - (row._distance || 0), // Convert distance to similarity
             document: row.document || '',
             metadata: {
                 activity_id: row.activity_id,
+                session_id: row.session_id || '',
                 summary_id: row.summary_id,
                 title: row.title,
+                activity_type: row.activity_type || '',
                 source_type: row.source_type,
                 complexity: row.complexity,
                 sentiment: row.sentiment,
@@ -189,7 +217,7 @@ async function querySimilarEmbeddings(queryEmbedding, limit = 10, filters = {}) 
 
         return formattedResults;
     } catch (error) {
-        logger.error('Error querying LanceDB:', error instanceof Error ? error : new Error(String(error)));
+        logger.error('Error querying LanceDB:', error);
         throw error;
     }
 }
@@ -250,28 +278,26 @@ async function deleteEmbedding(id) {
 async function getAllEmbeddings(limit = 100, offset = 0) {
     try {
         const tbl = await getTable();
+        const dimension = await getEmbeddingDimension();
+        const zeroVector = Array(dimension).fill(0);
 
-        // Use a zero vector of correct dimension (384) instead of [0]
-        const zeroVector = Array(EMBEDDING_DIMENSION).fill(0);
-
-        // LanceDB doesn't have direct offset, so we'll get all and slice
         const results = await tbl
-            .search(zeroVector) // Use proper dimension vector
+            .search(zeroVector)
             .limit(limit + offset)
             .toArray();
 
-        // Apply offset
         const paginatedResults = results.slice(offset, offset + limit);
 
-        // Format to match ChromaDB structure
         return {
             ids: paginatedResults.map(r => r.id),
             embeddings: paginatedResults.map(r => r.vector),
             documents: paginatedResults.map(r => r.document),
             metadatas: paginatedResults.map(r => ({
                 activity_id: r.activity_id,
+                session_id: r.session_id || '',
                 summary_id: r.summary_id,
                 title: r.title,
+                activity_type: r.activity_type || '',
                 source_type: r.source_type,
                 complexity: r.complexity,
                 sentiment: r.sentiment,
@@ -279,7 +305,7 @@ async function getAllEmbeddings(limit = 100, offset = 0) {
             })),
         };
     } catch (error) {
-        logger.error('Error getting all embeddings from LanceDB:', error instanceof Error ? error : new Error(String(error)));
+        logger.error('Error getting all embeddings from LanceDB:', error);
         throw error;
     }
 }
@@ -350,4 +376,5 @@ export {
     countEmbeddings,
     closeLanceDB,
     clearCollection,
+    getEmbeddingDimension,
 };
