@@ -3,19 +3,60 @@ import useElectron from '../../hooks/useElectron.js';
 import useAppStore from '../../store/store.js';
 import Button from '../../components/common/Button/index.jsx';
 import ActivityDetail from '../../components/features/History/ActivityDetail.jsx';
+import SessionDetail from '../../components/features/History/SessionDetail.jsx'; // NEW
 import './History.css';
 
 export default function HistoryPage() {
     const electron = useElectron();
+    const [viewMode, setViewMode] = useState('sessions'); // 'sessions' or 'activities'
+    const [sessions, setSessions] = useState([]); // NEW
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedActivity, setSelectedActivity] = useState(null);
+    const [selectedSession, setSelectedSession] = useState(null); // NEW
     const [filters, setFilters] = useState({
         sourceType: '',
+        activityType: '', // NEW
         appName: '',
+        projectName: '', // NEW
         searchQuery: '',
-        dateRange: 'all', // 'today', 'week', 'month', 'all'
+        dateRange: 'all',
     });
+
+    // NEW: Load sessions
+    const loadSessions = useCallback(async () => {
+        setLoading(true);
+        try {
+            const dateFilter = getDateFilter(filters.dateRange);
+            const allSessions = await electron.getSessions({
+                startDate: dateFilter.start,
+                endDate: dateFilter.end,
+                activityType: filters.activityType || undefined,
+                projectName: filters.projectName || undefined,
+                limit: 100,
+            });
+
+            // Client-side filtering
+            let filtered = allSessions;
+
+            if (filters.searchQuery) {
+                const query = filters.searchQuery.toLowerCase();
+                filtered = filtered.filter(
+                    (s) =>
+                        (s.summary || '').toLowerCase().includes(query) ||
+                        (s.project_name || '').toLowerCase().includes(query) ||
+                        (s.activity_type || '').toLowerCase().includes(query)
+                );
+            }
+
+            setSessions(filtered);
+        } catch (error) {
+            console.error('Failed to load sessions:', error);
+            setSessions([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [electron, filters]);
 
     const loadActivities = useCallback(async () => {
         setLoading(true);
@@ -25,10 +66,10 @@ export default function HistoryPage() {
                 startDate: dateFilter.start,
                 endDate: dateFilter.end,
                 sourceType: filters.sourceType || undefined,
+                activityType: filters.activityType || undefined, // NEW
                 limit: 100,
             });
 
-            // Client-side filtering for search and app name
             let filtered = allActivities;
 
             if (filters.searchQuery) {
@@ -58,18 +99,38 @@ export default function HistoryPage() {
     }, [electron, filters]);
 
     useEffect(() => {
-        loadActivities();
-    }, [loadActivities]);
+        if (viewMode === 'sessions') {
+            loadSessions();
+        } else {
+            loadActivities();
+        }
+    }, [viewMode, loadSessions, loadActivities]);
 
-    const sourceTypes = useMemo(() => {
-        const types = new Set(activities.map((a) => a.source_type).filter(Boolean));
+    const activityTypes = useMemo(() => {
+        const types = new Set([
+            ...sessions.map((s) => s.activity_type).filter(Boolean),
+            ...activities.map((a) => a.activity_type).filter(Boolean),
+        ]);
         return Array.from(types);
-    }, [activities]);
+    }, [sessions, activities]);
 
-    const appNames = useMemo(() => {
-        const apps = new Set(activities.map((a) => a.app_name).filter(Boolean));
-        return Array.from(apps).sort();
-    }, [activities]);
+    const projectNames = useMemo(() => {
+        const projects = new Set(sessions.map((s) => s.project_name).filter(Boolean));
+        return Array.from(projects).sort();
+    }, [sessions]);
+
+    const handleSessionClick = useCallback(async (session) => {
+        try {
+            const fullSession = await electron.getSessionById(session.id);
+            const sessionActivities = await electron.getActivitiesBySession(session.id);
+            setSelectedSession({
+                ...fullSession,
+                activities: sessionActivities,
+            });
+        } catch (error) {
+            console.error('Failed to load session details:', error);
+        }
+    }, [electron]);
 
     const handleActivityClick = useCallback((activity) => {
         setSelectedActivity(activity);
@@ -77,13 +138,52 @@ export default function HistoryPage() {
 
     const handleCloseDetail = useCallback(() => {
         setSelectedActivity(null);
+        setSelectedSession(null);
     }, []);
 
-    if (loading && activities.length === 0) {
+    // NEW: Semantic search handler
+    const handleSemanticSearch = useCallback(async () => {
+        if (!filters.searchQuery.trim()) return;
+
+        setLoading(true);
+        try {
+            const results = await electron.searchActivities(filters.searchQuery, {
+                dateRange: filters.dateRange,
+                activityType: filters.activityType || undefined,
+            });
+
+            if (viewMode === 'sessions') {
+                // Group results by session
+                const sessionIds = new Set(results.map(r => r.session_id).filter(Boolean));
+                const sessionMap = new Map();
+                sessions.forEach(s => sessionMap.set(s.id, s));
+
+                const matchedSessions = Array.from(sessionIds)
+                    .map(id => sessionMap.get(id))
+                    .filter(Boolean);
+
+                setSessions(matchedSessions);
+            } else {
+                setActivities(results);
+            }
+        } catch (error) {
+            console.error('Semantic search failed:', error);
+            // Fallback to regular search
+            if (viewMode === 'sessions') {
+                loadSessions();
+            } else {
+                loadActivities();
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [filters, viewMode, electron, loadSessions, loadActivities, sessions]);
+
+    if (loading && (sessions.length === 0 && activities.length === 0)) {
         return (
             <div className="history-page">
                 <div className="card">
-                    <div className="history-loading">Loading activities...</div>
+                    <div className="history-loading">Loading...</div>
                 </div>
             </div>
         );
@@ -95,28 +195,55 @@ export default function HistoryPage() {
                 <div>
                     <h1 className="history-title">Activity History</h1>
                     <p className="history-subtitle">
-                        Browse and explore your captured learning moments
+                        Browse sessions and activities
                     </p>
                 </div>
-                <div className="history-count">
-                    {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
+                <div className="history-actions">
+                    <div className="view-mode-toggle">
+                        <button
+                            className={`view-mode-btn ${viewMode === 'sessions' ? 'active' : ''}`}
+                            onClick={() => setViewMode('sessions')}
+                        >
+                            Sessions
+                        </button>
+                        <button
+                            className={`view-mode-btn ${viewMode === 'activities' ? 'active' : ''}`}
+                            onClick={() => setViewMode('activities')}
+                        >
+                            Activities
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {/* Filters */}
             <div className="card history-filters">
                 <div className="filters-grid">
-                    <div className="filter-group">
+                    <div className="filter-group filter-group-wide">
                         <label className="filter-label">Search</label>
-                        <input
-                            type="text"
-                            className="filter-input"
-                            placeholder="Search by title, URL, or app..."
-                            value={filters.searchQuery}
-                            onChange={(e) =>
-                                setFilters((f) => ({ ...f, searchQuery: e.target.value }))
-                            }
-                        />
+                        <div className="search-input-group">
+                            <input
+                                type="text"
+                                className="filter-input"
+                                placeholder="Search by title, URL, project, or use natural language..."
+                                value={filters.searchQuery}
+                                onChange={(e) =>
+                                    setFilters((f) => ({ ...f, searchQuery: e.target.value }))
+                                }
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleSemanticSearch();
+                                    }
+                                }}
+                            />
+                            <Button
+                                size="sm"
+                                onClick={handleSemanticSearch}
+                                disabled={!filters.searchQuery.trim()}
+                            >
+                                🔍 Search
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="filter-group">
@@ -136,16 +263,16 @@ export default function HistoryPage() {
                     </div>
 
                     <div className="filter-group">
-                        <label className="filter-label">Source Type</label>
+                        <label className="filter-label">Activity Type</label>
                         <select
                             className="filter-select"
-                            value={filters.sourceType}
+                            value={filters.activityType}
                             onChange={(e) =>
-                                setFilters((f) => ({ ...f, sourceType: e.target.value }))
+                                setFilters((f) => ({ ...f, activityType: e.target.value }))
                             }
                         >
                             <option value="">All Types</option>
-                            {sourceTypes.map((type) => (
+                            {activityTypes.map((type) => (
                                 <option key={type} value={type}>
                                     {type.charAt(0).toUpperCase() + type.slice(1)}
                                 </option>
@@ -153,47 +280,116 @@ export default function HistoryPage() {
                         </select>
                     </div>
 
-                    <div className="filter-group">
-                        <label className="filter-label">App</label>
-                        <select
-                            className="filter-select"
-                            value={filters.appName}
-                            onChange={(e) =>
-                                setFilters((f) => ({ ...f, appName: e.target.value }))
-                            }
-                        >
-                            <option value="">All Apps</option>
-                            {appNames.map((app) => (
-                                <option key={app} value={app}>
-                                    {app}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {viewMode === 'sessions' && (
+                        <div className="filter-group">
+                            <label className="filter-label">Project</label>
+                            <select
+                                className="filter-select"
+                                value={filters.projectName}
+                                onChange={(e) =>
+                                    setFilters((f) => ({ ...f, projectName: e.target.value }))
+                                }
+                            >
+                                <option value="">All Projects</option>
+                                {projectNames.map((project) => (
+                                    <option key={project} value={project}>
+                                        {project}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {viewMode === 'activities' && (
+                        <>
+                            <div className="filter-group">
+                                <label className="filter-label">Source Type</label>
+                                <select
+                                    className="filter-select"
+                                    value={filters.sourceType}
+                                    onChange={(e) =>
+                                        setFilters((f) => ({ ...f, sourceType: e.target.value }))
+                                    }
+                                >
+                                    <option value="">All Types</option>
+                                    {/* Populate from activities */}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label className="filter-label">App</label>
+                                <select
+                                    className="filter-select"
+                                    value={filters.appName}
+                                    onChange={(e) =>
+                                        setFilters((f) => ({ ...f, appName: e.target.value }))
+                                    }
+                                >
+                                    <option value="">All Apps</option>
+                                    {/* Populate from activities */}
+                                </select>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
+            {/* Sessions List */}
+            {viewMode === 'sessions' && (
+                sessions.length === 0 ? (
+                    <div className="card history-empty">
+                        <div className="empty-icon">📚</div>
+                        <h3 className="empty-title">No sessions found</h3>
+                        <p className="empty-description">
+                            {filters.searchQuery || filters.activityType || filters.projectName
+                                ? 'Try adjusting your filters'
+                                : 'Start tracking to see your learning sessions here'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="sessions-list">
+                        {sessions.map((session) => (
+                            <SessionItem
+                                key={session.id}
+                                session={session}
+                                onClick={() => handleSessionClick(session)}
+                            />
+                        ))}
+                    </div>
+                )
+            )}
+
             {/* Activities List */}
-            {activities.length === 0 ? (
-                <div className="card history-empty">
-                    <div className="empty-icon">📚</div>
-                    <h3 className="empty-title">No activities found</h3>
-                    <p className="empty-description">
-                        {filters.searchQuery || filters.sourceType || filters.appName
-                            ? 'Try adjusting your filters'
-                            : 'Start tracking to see your learning activities here'}
-                    </p>
-                </div>
-            ) : (
-                <div className="activities-list">
-                    {activities.map((activity) => (
-                        <ActivityItem
-                            key={activity.id}
-                            activity={activity}
-                            onClick={() => handleActivityClick(activity)}
-                        />
-                    ))}
-                </div>
+            {viewMode === 'activities' && (
+                activities.length === 0 ? (
+                    <div className="card history-empty">
+                        <div className="empty-icon">📚</div>
+                        <h3 className="empty-title">No activities found</h3>
+                        <p className="empty-description">
+                            {filters.searchQuery || filters.sourceType || filters.appName
+                                ? 'Try adjusting your filters'
+                                : 'Start tracking to see your learning activities here'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="activities-list">
+                        {activities.map((activity) => (
+                            <ActivityItem
+                                key={activity.id}
+                                activity={activity}
+                                onClick={() => handleActivityClick(activity)}
+                            />
+                        ))}
+                    </div>
+                )
+            )}
+
+            {/* Session Detail Modal */}
+            {selectedSession && (
+                <SessionDetail
+                    session={selectedSession}
+                    onClose={handleCloseDetail}
+                />
             )}
 
             {/* Activity Detail Modal */}
@@ -203,6 +399,71 @@ export default function HistoryPage() {
                     onClose={handleCloseDetail}
                 />
             )}
+        </div>
+    );
+}
+
+// NEW: Session Item Component
+function SessionItem({ session, onClick }) {
+    const formattedDate = useMemo(() => {
+        const date = new Date(session.start_time);
+        return {
+            date: date.toLocaleDateString(),
+            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+    }, [session.start_time]);
+
+    const duration = useMemo(() => {
+        if (session.duration_seconds) {
+            const minutes = Math.floor(session.duration_seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            if (hours > 0) {
+                return `${hours}h ${minutes % 60}m`;
+            }
+            return `${minutes}m`;
+        }
+        return 'Ongoing';
+    }, [session.duration_seconds]);
+
+    const concepts = useMemo(() => {
+        try {
+            return typeof session.concepts === 'string'
+                ? JSON.parse(session.concepts)
+                : session.concepts || [];
+        } catch {
+            return [];
+        }
+    }, [session.concepts]);
+
+    return (
+        <div className="session-item" onClick={onClick}>
+            <div className="session-item-main">
+                <div className="session-item-header">
+                    <h3 className="session-item-title">
+                        {session.project_name || session.activity_type || 'Untitled Session'}
+                    </h3>
+                    <span className="session-item-badge">{session.activity_type}</span>
+                </div>
+                {session.summary && (
+                    <p className="session-item-summary">{session.summary}</p>
+                )}
+                <div className="session-item-meta">
+                    <span className="session-item-date">{formattedDate.date}</span>
+                    <span className="session-item-time">{formattedDate.time}</span>
+                    <span className="session-item-separator">•</span>
+                    <span className="session-item-duration">{duration}</span>
+                    {concepts.length > 0 && (
+                        <>
+                            <span className="session-item-separator">•</span>
+                            <span className="session-item-concepts">
+                                {concepts.slice(0, 3).join(', ')}
+                                {concepts.length > 3 && '...'}
+                            </span>
+                        </>
+                    )}
+                </div>
+            </div>
+            <div className="session-item-arrow">→</div>
         </div>
     );
 }

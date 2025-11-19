@@ -31,6 +31,15 @@ export default function useElectron() {
                 onSyncProgress: () => { },
                 removeSyncProgressListener: () => { },
                 selectDirectory: async () => null,
+                getSessions: (filters) => ipcRenderer.invoke(CHANNELS.DB.GET_SESSIONS, filters),
+                getSessionById: (sessionId) => ipcRenderer.invoke(CHANNELS.DB.GET_SESSION_BY_ID, sessionId),
+                getActivitiesBySession: (sessionId) => ipcRenderer.invoke(CHANNELS.DB.GET_ACTIVITIES_BY_SESSION, sessionId),
+                searchActivities: (query, filters) => ipcRenderer.invoke(CHANNELS.DB.SEARCH_ACTIVITIES, query, filters),
+                getDailySummary: (date) => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_DAILY_SUMMARY, date),
+                getWeeklyInsights: (weekStart) => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_WEEKLY_INSIGHTS, weekStart),
+                getLearningGaps: () => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_LEARNING_GAPS),
+                getFocusAreas: () => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_FOCUS_AREAS),
+                trackProgress: (topic) => ipcRenderer.invoke(CHANNELS.INSIGHTS.TRACK_PROGRESS, topic),
             };
         }
 
@@ -57,6 +66,15 @@ export default function useElectron() {
             onSyncProgress: (callback) => electronAPI.onSyncProgress?.(callback),
             removeSyncProgressListener: () => electronAPI.removeSyncProgressListener?.(),
             selectDirectory: () => electronAPI.selectDirectory?.(),
+            getSessions: (filters) => ipcRenderer.invoke(CHANNELS.DB.GET_SESSIONS, filters),
+            getSessionById: (sessionId) => ipcRenderer.invoke(CHANNELS.DB.GET_SESSION_BY_ID, sessionId),
+            getActivitiesBySession: (sessionId) => ipcRenderer.invoke(CHANNELS.DB.GET_ACTIVITIES_BY_SESSION, sessionId),
+            searchActivities: (query, filters) => ipcRenderer.invoke(CHANNELS.DB.SEARCH_ACTIVITIES, query, filters),
+            getDailySummary: (date) => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_DAILY_SUMMARY, date),
+            getWeeklyInsights: (weekStart) => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_WEEKLY_INSIGHTS, weekStart),
+            getLearningGaps: () => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_LEARNING_GAPS),
+            getFocusAreas: () => ipcRenderer.invoke(CHANNELS.INSIGHTS.GET_FOCUS_AREAS),
+            trackProgress: (topic) => ipcRenderer.invoke(CHANNELS.INSIGHTS.TRACK_PROGRESS, topic),
         };
     }, []);
 

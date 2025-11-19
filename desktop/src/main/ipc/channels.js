@@ -27,6 +27,20 @@ export const CHANNELS = {
         DELETE_ACTIVITY: 'db:delete-activity',
         EXPORT_DATA: 'db:export-data',
         CLEAR_DATA: 'db:clear-data',
+        // NEW: Session-related
+        GET_SESSIONS: 'db:get-sessions',
+        GET_SESSION_BY_ID: 'db:get-session-by-id',
+        GET_ACTIVITIES_BY_SESSION: 'db:get-activities-by-session',
+        // NEW: Semantic search
+        SEARCH_ACTIVITIES: 'db:search-activities',
+    },
+
+    INSIGHTS: {
+        GET_DAILY_SUMMARY: 'insights:get-daily-summary',
+        GET_WEEKLY_INSIGHTS: 'insights:get-weekly-insights',
+        GET_LEARNING_GAPS: 'insights:get-learning-gaps',
+        GET_FOCUS_AREAS: 'insights:get-focus-areas',
+        TRACK_PROGRESS: 'insights:track-progress',
     },
 
     // Knowledge graph

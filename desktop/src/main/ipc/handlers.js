@@ -9,6 +9,16 @@ import { getHybridQueryHandler } from '../services/agents/hybrid-query-handler.j
 import { getAgentManager } from '../services/agents/agent-manager.js';
 import { getAgentStatusTracker } from '../services/agents/agent-status-tracker.js';
 import { getMainWindow } from '../windows/main-window.js';
+import { getSessions, getSessionById, getActivitiesBySession } from '../storage/sqlite-db.js';
+import {
+    generateDailySummary,
+    generateWeeklyInsights,
+    identifyLearningGaps,
+    suggestFocusAreas,
+    trackProgress
+} from '../services/activity/activity-insights-engine.js';
+import { searchActivities } from '../services/semantic-search-service.js';
+
 
 // Activity handlers
 function registerActivityHandlers() {
@@ -223,6 +233,45 @@ function registerDatabaseHandlers() {
                     total: '0 B',
                 },
             };
+        }
+    });
+
+    ipcMain.handle(CHANNELS.DB.GET_SESSIONS, async (event, filters) => {
+        try {
+            return await getSessions(filters);
+        } catch (error) {
+            logger.error('Error getting sessions:', error);
+            throw error;
+        }
+    });
+
+    // NEW: Get session by ID
+    ipcMain.handle(CHANNELS.DB.GET_SESSION_BY_ID, async (event, sessionId) => {
+        try {
+            return await getSessionById(sessionId);
+        } catch (error) {
+            logger.error('Error getting session:', error);
+            throw error;
+        }
+    });
+
+    // NEW: Get activities by session
+    ipcMain.handle(CHANNELS.DB.GET_ACTIVITIES_BY_SESSION, async (event, sessionId) => {
+        try {
+            return await getActivitiesBySession(sessionId);
+        } catch (error) {
+            logger.error('Error getting activities by session:', error);
+            throw error;
+        }
+    });
+
+    // NEW: Semantic search
+    ipcMain.handle(CHANNELS.DB.SEARCH_ACTIVITIES, async (event, query, filters) => {
+        try {
+            return await searchActivities(query, filters);
+        } catch (error) {
+            logger.error('Error searching activities:', error);
+            throw error;
         }
     });
 }
@@ -651,6 +700,54 @@ function registerAgentHandlers() {
     });
 }
 
+//Register insights handlers
+function registerInsightsHandlers() {
+    ipcMain.handle(CHANNELS.INSIGHTS.GET_DAILY_SUMMARY, async (event, date) => {
+        try {
+            return await generateDailySummary(date);
+        } catch (error) {
+            logger.error('Error generating daily summary:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.INSIGHTS.GET_WEEKLY_INSIGHTS, async (event, weekStart) => {
+        try {
+            return await generateWeeklyInsights(weekStart);
+        } catch (error) {
+            logger.error('Error generating weekly insights:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.INSIGHTS.GET_LEARNING_GAPS, async () => {
+        try {
+            return await identifyLearningGaps();
+        } catch (error) {
+            logger.error('Error identifying learning gaps:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.INSIGHTS.GET_FOCUS_AREAS, async () => {
+        try {
+            return await suggestFocusAreas();
+        } catch (error) {
+            logger.error('Error getting focus areas:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle(CHANNELS.INSIGHTS.TRACK_PROGRESS, async (event, topic) => {
+        try {
+            return await trackProgress(topic);
+        } catch (error) {
+            logger.error('Error tracking progress:', error);
+            throw error;
+        }
+    });
+}
+
 // Register all IPC handlers
 function registerIpcHandlers() {
     registerActivityHandlers();
@@ -664,7 +761,7 @@ function registerIpcHandlers() {
     registerSyncHandlers();
     registerDialogHandlers();
     registerAgentHandlers();
-
+    registerInsightsHandlers();
     // Agent status event forwarding
     const statusTracker = getAgentStatusTracker();
 
