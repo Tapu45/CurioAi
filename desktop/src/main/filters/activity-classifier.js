@@ -1,4 +1,5 @@
 import logger from '../utils/logger.js';
+import { classifyActivityML } from '../services/activity-classifier-ml.js';
 
 // Learning activity indicators
 const LEARNING_KEYWORDS = [
@@ -37,8 +38,52 @@ const LEARNING_DOMAINS = [
     'pluralsight.com', 'linkedin.com/learning',
 ];
 
-// Classify activity type
-function classifyActivity(activity) {
+// Use ML classifier by default
+let useMLClassifier = true;
+
+/**
+ * Toggle ML classifier use.
+ * @param {boolean} useML
+ */
+export function setUseMLClassifier(useML) {
+    useMLClassifier = !!useML;
+    logger.info(`ML classifier ${useMLClassifier ? 'enabled' : 'disabled'}`);
+}
+
+/**
+ * Async classify wrapper - prefer ML classifier if enabled, fallback to rule-based.
+ * @param {Object} activity
+ * @returns {Promise<Object>}
+ */
+export async function classifyActivity(activity) {
+    if (useMLClassifier) {
+        try {
+            const mlResult = await classifyActivityML(activity);
+
+            if (mlResult && typeof mlResult.confidence === 'number' && mlResult.confidence >= 0.6) {
+                logger.debug('ML classifier used', { activity, mlResult });
+                return mlResult;
+            }
+
+            logger.debug('ML classification confidence low or invalid, falling back to rule-based', {
+                activity,
+                mlResult,
+            });
+        } catch (err) {
+            logger.debug('ML classifier error, using rule-based:', err?.message || err);
+        }
+    }
+
+    return classifyActivityRuleBased(activity);
+}
+
+/**
+ * Rule-based activity classification (original implementation).
+ * Kept synchronous so callers can use it deterministically.
+ * @param {Object} activity
+ * @returns {Object}
+ */
+export function classifyActivityRuleBased(activity) {
     const appName = (activity.app_name || '').toLowerCase();
     const title = (activity.window_title || '').toLowerCase();
     const url = (activity.url || '').toLowerCase();
@@ -119,12 +164,13 @@ function classifyActivity(activity) {
 }
 
 // Check if activity is learning-related
-function isLearningActivity(classification) {
-    return classification.type === 'learning' && classification.confidence >= 0.6;
+export function isLearningActivity(classification) {
+    return classification?.type === 'learning' && classification?.confidence >= 0.6;
 }
 
 // Check if app is code-related
-function isCodeApp(appName) {
+export function isCodeApp(appName) {
+    appName = (appName || '').toLowerCase();
     const codeApps = [
         'code', 'visual studio', 'intellij', 'pycharm', 'webstorm',
         'sublime', 'atom', 'vim', 'emacs', 'terminal', 'iterm',
@@ -133,7 +179,8 @@ function isCodeApp(appName) {
 }
 
 // Check if app is document/note-related
-function isDocumentApp(appName) {
+export function isDocumentApp(appName) {
+    appName = (appName || '').toLowerCase();
     const docApps = [
         'notion', 'obsidian', 'word', 'pages', 'notes',
         'evernote', 'onenote', 'bear',
@@ -142,8 +189,8 @@ function isDocumentApp(appName) {
 }
 
 export {
-    classifyActivity,
-    isLearningActivity,
-    isCodeApp,
-    isDocumentApp,
+    // Async ML-enabled classifier
+    classifyActivity as classifyActivityAsync,
+    // Synchronous rule-based classifier
+    classifyActivityRuleBased,
 };

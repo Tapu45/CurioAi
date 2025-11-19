@@ -3,45 +3,218 @@ import path from 'path';
 import { app } from 'electron';
 import logger from '../utils/logger.js';
 
-// Detect code project from window title
-function extractProjectInfo(activity) {
+// Enhanced project detection with workspace path detection
+async function extractProjectInfo(activity) {
     const title = activity.window_title || '';
     const appName = activity.app_name || '';
 
-    // Common patterns:
-    // "project-name - Visual Studio Code"
-    // "filename.js - project-name - VS Code"
+    // Try to extract project path from window title
+    // VS Code pattern: "workspace-name - Visual Studio Code" or "file.js - workspace-name - VS Code"
     const patterns = [
         /^([^-]+)\s*-\s*(?:Visual Studio Code|Code|VS Code)/,
-        /([^-]+\.(js|ts|py|java|cpp|c|h|html|css|json|md|go|rs|php|rb))\s*-\s*([^-]+)/,
+        /([^-]+\.(js|ts|py|java|cpp|c|h|html|css|json|md|go|rs|php|rb))\s*-\s*([^-]+)\s*-\s*(?:Visual Studio Code|Code|VS Code)/,
     ];
+
+    let projectName = null;
+    let fileName = null;
+    let projectPath = null;
 
     for (const pattern of patterns) {
         const match = title.match(pattern);
         if (match) {
-            return {
-                projectName: match[1]?.trim() || match[3]?.trim(),
-                fileName: match[1]?.trim(),
-                language: detectLanguage(match[1] || ''),
-            };
+            projectName = match[1]?.trim() || match[3]?.trim();
+            fileName = match[1]?.trim();
+            break;
         }
     }
 
     // If no pattern matches, try to extract project name from title
-    const simpleMatch = title.match(/^([^-]+)/);
-    if (simpleMatch) {
-        return {
-            projectName: simpleMatch[1].trim(),
-            fileName: null,
-            language: detectLanguage(simpleMatch[1]),
-        };
+    if (!projectName) {
+        const simpleMatch = title.match(/^([^-]+)/);
+        if (simpleMatch) {
+            projectName = simpleMatch[1].trim();
+        }
+    }
+
+    // Try to find actual project path by searching common workspace locations
+    if (projectName) {
+        projectPath = await findProjectPath(projectName, fileName);
+    }
+
+    // Extract project type and frameworks if project path found
+    let projectType = null;
+    let frameworks = [];
+    let isLearningProject = false;
+
+    if (projectPath) {
+        const projectInfo = await analyzeProject(projectPath);
+        projectType = projectInfo.type;
+        frameworks = projectInfo.frameworks;
+        isLearningProject = projectInfo.isLearning;
     }
 
     return {
-        projectName: null,
-        fileName: null,
-        language: null,
+        projectName,
+        fileName,
+        projectPath,
+        language: detectLanguage(fileName || projectName),
+        projectType,
+        frameworks,
+        isLearningProject,
     };
+}
+
+// Find actual project path on filesystem
+async function findProjectPath(projectName, fileName) {
+    const searchPaths = [
+        path.join(app.getPath('home'), 'Documents', 'Projects'),
+        path.join(app.getPath('home'), 'Documents'),
+        path.join(app.getPath('home'), 'Desktop'),
+        path.join(app.getPath('home'), 'Code'),
+        path.join(app.getPath('home'), 'workspace'),
+    ];
+
+    for (const basePath of searchPaths) {
+        try {
+            // Try exact match
+            const exactPath = path.join(basePath, projectName);
+            const stats = await fs.stat(exactPath);
+            if (stats.isDirectory()) {
+                return exactPath;
+            }
+
+            // Try to find directory containing the file
+            if (fileName) {
+                const dirs = await fs.readdir(basePath);
+                for (const dir of dirs) {
+                    const dirPath = path.join(basePath, dir);
+                    try {
+                        const dirStats = await fs.stat(dirPath);
+                        if (dirStats.isDirectory()) {
+                            const filePath = path.join(dirPath, fileName);
+                            await fs.access(filePath);
+                            return dirPath;
+                        }
+                    } catch {
+                        // Continue searching
+                    }
+                }
+            }
+        } catch {
+            // Continue searching
+        }
+    }
+
+    return null;
+}
+
+// Analyze project to detect type, frameworks, and if it's a learning project
+async function analyzeProject(projectPath) {
+    try {
+        const files = await fs.readdir(projectPath);
+        const projectInfo = {
+            type: null,
+            frameworks: [],
+            isLearning: false,
+        };
+
+        // Check for package.json (Node.js/React/Vue/etc.)
+        if (files.includes('package.json')) {
+            try {
+                const packageJsonPath = path.join(projectPath, 'package.json');
+                const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+
+                // Detect frameworks
+                const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+
+                if (deps.react || deps['react-dom']) {
+                    projectInfo.frameworks.push('React');
+                    projectInfo.type = 'React';
+                }
+                if (deps.vue || deps['vue-router']) {
+                    projectInfo.frameworks.push('Vue');
+                    projectInfo.type = 'Vue';
+                }
+                if (deps.angular || deps['@angular/core']) {
+                    projectInfo.frameworks.push('Angular');
+                    projectInfo.type = 'Angular';
+                }
+                if (deps.next) {
+                    projectInfo.frameworks.push('Next.js');
+                    projectInfo.type = 'Next.js';
+                }
+                if (deps.express) {
+                    projectInfo.frameworks.push('Express');
+                    if (!projectInfo.type) projectInfo.type = 'Node.js';
+                }
+                if (deps['@nestjs/core']) {
+                    projectInfo.frameworks.push('NestJS');
+                    projectInfo.type = 'NestJS';
+                }
+                if (deps.tailwindcss) {
+                    projectInfo.frameworks.push('Tailwind CSS');
+                }
+                if (deps.typescript) {
+                    projectInfo.frameworks.push('TypeScript');
+                }
+
+                // Check if learning project (tutorial keywords in name/path)
+                const projectName = packageJson.name || '';
+                const lowerName = projectName.toLowerCase();
+                const lowerPath = projectPath.toLowerCase();
+                const learningKeywords = ['tutorial', 'learn', 'course', 'example', 'demo', 'practice', 'training'];
+                projectInfo.isLearning = learningKeywords.some(keyword =>
+                    lowerName.includes(keyword) || lowerPath.includes(keyword)
+                );
+            } catch (error) {
+                logger.debug('Error reading package.json:', error.message);
+            }
+        }
+
+        // Check for requirements.txt (Python)
+        if (files.includes('requirements.txt')) {
+            try {
+                const requirementsPath = path.join(projectPath, 'requirements.txt');
+                const requirements = await fs.readFile(requirementsPath, 'utf8');
+
+                if (requirements.includes('django')) {
+                    projectInfo.frameworks.push('Django');
+                    projectInfo.type = 'Django';
+                }
+                if (requirements.includes('flask')) {
+                    projectInfo.frameworks.push('Flask');
+                    projectInfo.type = 'Flask';
+                }
+                if (requirements.includes('fastapi')) {
+                    projectInfo.frameworks.push('FastAPI');
+                    projectInfo.type = 'FastAPI';
+                }
+                if (!projectInfo.type) projectInfo.type = 'Python';
+            } catch (error) {
+                logger.debug('Error reading requirements.txt:', error.message);
+            }
+        }
+
+        // Check for pom.xml (Java/Maven)
+        if (files.includes('pom.xml')) {
+            projectInfo.type = 'Java';
+        }
+
+        // Check for Cargo.toml (Rust)
+        if (files.includes('Cargo.toml')) {
+            projectInfo.type = 'Rust';
+        }
+
+        // Check for go.mod (Go)
+        if (files.includes('go.mod')) {
+            projectInfo.type = 'Go';
+        }
+
+        return projectInfo;
+    } catch (error) {
+        logger.debug('Error analyzing project:', error.message);
+        return { type: null, frameworks: [], isLearning: false };
+    }
 }
 
 // Detect programming language from filename or content
@@ -84,18 +257,64 @@ function detectLanguage(filename) {
     return languageMap[ext] || null;
 }
 
-// Extract code content from IDE activity
+// Extract framework/library usage from file imports
+async function extractFrameworkUsage(filePath) {
+    try {
+        const content = await fs.readFile(filePath, 'utf8');
+        const frameworks = [];
+
+        // React patterns
+        if (content.includes('import') && (content.includes('react') || content.includes('React'))) {
+            frameworks.push('React');
+        }
+
+        // Vue patterns
+        if (content.includes('import') && content.includes('vue')) {
+            frameworks.push('Vue');
+        }
+
+        // Angular patterns
+        if (content.includes('@angular')) {
+            frameworks.push('Angular');
+        }
+
+        // Express patterns
+        if (content.includes('require') && content.includes('express')) {
+            frameworks.push('Express');
+        }
+
+        return frameworks;
+    } catch (error) {
+        logger.debug('Error extracting framework usage:', error.message);
+        return [];
+    }
+}
+
+// Enhanced code content extraction
 async function extractCodeContent(activity) {
     try {
-        const projectInfo = extractProjectInfo(activity);
+        const projectInfo = await extractProjectInfo(activity);
 
-        // For now, we'll extract metadata about the code activity
-        // Actual code content extraction would require IDE integration
-        // which is complex and depends on the specific IDE
+        // Extract file path if available
+        let filePath = null;
+        if (projectInfo.projectPath && projectInfo.fileName) {
+            filePath = path.join(projectInfo.projectPath, projectInfo.fileName);
+            try {
+                await fs.access(filePath);
+            } catch {
+                filePath = null;
+            }
+        }
 
-        const content = generateCodeSummary(activity, projectInfo);
+        // Extract framework usage if file path available
+        let frameworkUsage = [];
+        if (filePath) {
+            frameworkUsage = await extractFrameworkUsage(filePath);
+        }
 
-        logger.info(`Code activity detected: ${projectInfo.projectName || 'Unknown'}`);
+        const content = generateCodeSummary(activity, projectInfo, frameworkUsage);
+
+        logger.info(`Code activity detected: ${projectInfo.projectName || 'Unknown'} (${projectInfo.projectType || 'Unknown Type'})`);
 
         return {
             title: projectInfo.projectName || activity.window_title || '',
@@ -104,10 +323,15 @@ async function extractCodeContent(activity) {
             metadata: {
                 app: activity.app_name,
                 projectName: projectInfo.projectName,
+                projectPath: projectInfo.projectPath,
                 fileName: projectInfo.fileName,
+                filePath,
                 language: projectInfo.language,
+                projectType: projectInfo.projectType,
+                frameworks: [...projectInfo.frameworks, ...frameworkUsage],
+                isLearningProject: projectInfo.isLearningProject,
                 sourceType: 'code',
-                extractionMethod: 'metadata',
+                extractionMethod: 'enhanced-metadata',
             },
         };
     } catch (error) {
@@ -124,12 +348,21 @@ async function extractCodeContent(activity) {
     }
 }
 
-// Generate summary of code activity
-function generateCodeSummary(activity, projectInfo) {
+// Generate enhanced summary
+function generateCodeSummary(activity, projectInfo, frameworkUsage) {
     const parts = [];
 
     if (projectInfo.projectName) {
         parts.push(`Project: ${projectInfo.projectName}`);
+    }
+
+    if (projectInfo.projectType) {
+        parts.push(`Type: ${projectInfo.projectType}`);
+    }
+
+    if (projectInfo.frameworks.length > 0 || frameworkUsage.length > 0) {
+        const allFrameworks = [...new Set([...projectInfo.frameworks, ...frameworkUsage])];
+        parts.push(`Frameworks: ${allFrameworks.join(', ')}`);
     }
 
     if (projectInfo.fileName) {
@@ -140,11 +373,13 @@ function generateCodeSummary(activity, projectInfo) {
         parts.push(`Language: ${projectInfo.language}`);
     }
 
-    parts.push(`IDE: ${activity.app_name}`);
-
-    if (activity.window_title) {
-        parts.push(`Context: ${activity.window_title}`);
+    if (projectInfo.isLearningProject) {
+        parts.push(`Context: Learning/Tutorial`);
+    } else {
+        parts.push(`Context: Working/Development`);
     }
+
+    parts.push(`IDE: ${activity.app_name}`);
 
     return parts.join('\n');
 }
@@ -152,13 +387,8 @@ function generateCodeSummary(activity, projectInfo) {
 // Try to read code file content (if accessible)
 async function tryReadCodeFile(filePath) {
     try {
-        // Check if file exists and is readable
         await fs.access(filePath);
-
-        // Read file content
         const content = await fs.readFile(filePath, 'utf8');
-
-        // Limit content size (first 5000 characters)
         return content.substring(0, 5000);
     } catch (error) {
         logger.debug(`Could not read code file: ${filePath}`, error.message);
@@ -166,4 +396,10 @@ async function tryReadCodeFile(filePath) {
     }
 }
 
-export { extractCodeContent, extractProjectInfo, detectLanguage , tryReadCodeFile };
+export {
+    extractCodeContent,
+    extractProjectInfo,
+    detectLanguage,
+    tryReadCodeFile,
+    analyzeProject,
+};

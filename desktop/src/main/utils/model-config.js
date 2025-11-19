@@ -28,6 +28,11 @@ export const MODEL_TIERS = {
             size: 12, // MB
             description: 'Small spaCy model for NER',
         },
+        classifier: {
+            model: 'rule-based',
+            method: 'rule-based',
+            description: 'Fast rule-based classification',
+        },
         recommended: true, // Recommended for most users
     },
     MID_RANGE: {
@@ -53,6 +58,11 @@ export const MODEL_TIERS = {
             model: 'en_core_web_sm',
             size: 12,
             description: 'Small spaCy model for NER',
+        },
+        classifier: {
+            model: 'rule-based',
+            method: 'rule-based',
+            description: 'Fast rule-based classification',
         },
         recommended: true,
     },
@@ -80,6 +90,11 @@ export const MODEL_TIERS = {
             size: 12,
             description: 'Small spaCy model (can upgrade to medium for better NER)',
         },
+        classifier: {
+            model: 'distilbert-base-uncased',
+            method: 'ml',
+            description: 'ML-based classification using DistilBERT',
+        },
         recommended: false,
     },
     PREMIUM: {
@@ -105,6 +120,11 @@ export const MODEL_TIERS = {
             model: 'en_core_web_md',
             size: 40, // MB
             description: 'Medium spaCy model with better NER',
+        },
+        classifier: {
+            model: 'distilbert-base-uncased',
+            method: 'ml',
+            description: 'ML-based classification using DistilBERT',
         },
         recommended: false,
     },

@@ -49,6 +49,10 @@ const DEFAULT_APP_CONFIG = {
     embeddingModel: null, // null = use tier default
     nlpModel: null, // null = use tier default
     autoSelectModel: true, // Auto-select on first run
+
+    activityThresholds: null, // null = use defaults
+    activityRules: null, // null = use defaults
+    sessionTimeout: 30 * 60 * 1000, // 30 minutes
 };
 
 const DEFAULT_PRIVACY_CONFIG = {

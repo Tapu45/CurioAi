@@ -151,6 +151,54 @@ async function createTables(client) {
     )
 `);
 
+    await client.execute(`
+    CREATE TABLE IF NOT EXISTS activity_sessions (
+        id TEXT PRIMARY KEY,
+        activity_type TEXT NOT NULL,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME,
+        duration_seconds INTEGER,
+        project_name TEXT,
+        aggregated_files TEXT, -- JSON string
+        aggregated_urls TEXT, -- JSON string
+        summary TEXT,
+        concepts TEXT, -- JSON string
+        confidence REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+`);
+
+    // Activity Entities table
+    await client.execute(`
+    CREATE TABLE IF NOT EXISTS activity_entities (
+        id TEXT PRIMARY KEY,
+        activity_id INTEGER,
+        session_id TEXT,
+        entity_type TEXT,
+        entity_name TEXT,
+        entity_value TEXT, -- JSON string
+        confidence REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+        FOREIGN KEY (session_id) REFERENCES activity_sessions(id) ON DELETE CASCADE
+    )
+`);
+
+    // Semantic Index table
+    await client.execute(`
+    CREATE TABLE IF NOT EXISTS semantic_index (
+        id TEXT PRIMARY KEY,
+        activity_id INTEGER,
+        session_id TEXT,
+        embedding_vector TEXT,
+        search_text TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+        FOREIGN KEY (session_id) REFERENCES activity_sessions(id) ON DELETE CASCADE
+    )
+`);
+
     // Add columns to files table (with IF NOT EXISTS check)
     await client.execute(`
     ALTER TABLE files ADD COLUMN source_type TEXT DEFAULT 'workspace'
@@ -215,6 +263,62 @@ async function createTables(client) {
     `);
     await client.execute(`
         CREATE INDEX IF NOT EXISTS idx_embeddings_summary_id ON embeddings(summary_id);
+    `);
+
+    const activitiesColumns = await client.execute(`
+        PRAGMA table_info(activities)
+    `);
+    const columnNames = activitiesColumns.rows.map(row => row.name);
+
+    if (!columnNames.includes('session_id')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN session_id TEXT`);
+    }
+    if (!columnNames.includes('activity_type')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN activity_type TEXT`);
+    }
+    if (!columnNames.includes('project_name')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN project_name TEXT`);
+    }
+    if (!columnNames.includes('file_path')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN file_path TEXT`);
+    }
+    if (!columnNames.includes('video_id')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN video_id TEXT`);
+    }
+    if (!columnNames.includes('game_name')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN game_name TEXT`);
+    }
+    if (!columnNames.includes('is_meaningful')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN is_meaningful BOOLEAN DEFAULT 1`);
+    }
+    if (!columnNames.includes('confidence')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN confidence REAL`);
+    }
+    if (!columnNames.includes('metadata')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN metadata TEXT`);
+    }
+    if (!columnNames.includes('embedding_id')) {
+        await client.execute(`ALTER TABLE activities ADD COLUMN embedding_id TEXT`);
+    }
+
+    // Add indexes
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activities_session_id ON activities(session_id);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activities_activity_type ON activities(activity_type);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activity_sessions_activity_type ON activity_sessions(activity_type);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activity_sessions_start_time ON activity_sessions(start_time);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activity_entities_activity_id ON activity_entities(activity_id);
+    `);
+    await client.execute(`
+        CREATE INDEX IF NOT EXISTS idx_activity_entities_session_id ON activity_entities(session_id);
     `);
 
     logger.info('Database tables ensured');
@@ -675,6 +779,143 @@ async function getFileChunks(fileId) {
     }
 }
 
+// Add this function
+async function getActivitiesBySession(sessionId) {
+    try {
+        const result = await dbClient.execute(`
+            SELECT * FROM activities
+            WHERE session_id = ?
+            ORDER BY timestamp ASC
+        `, [sessionId]);
+        return result.rows || [];
+    } catch (error) {
+        logger.error('Error getting activities by session:', error);
+        return [];
+    }
+}
+
+async function createSession(session) {
+    try {
+        await dbClient.execute(`
+            INSERT INTO activity_sessions (
+                id, activity_type, start_time, end_time, duration_seconds,
+                project_name, aggregated_files, aggregated_urls, summary, concepts, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            session.id,
+            session.activity_type,
+            session.start_time,
+            session.end_time || null,
+            session.duration_seconds || null,
+            session.project_name || null,
+            session.aggregated_files ? JSON.stringify(session.aggregated_files) : null,
+            session.aggregated_urls ? JSON.stringify(session.aggregated_urls) : null,
+            session.summary || null,
+            session.concepts ? JSON.stringify(session.concepts) : null,
+            session.confidence || null,
+        ]);
+        logger.info(`Session created: ${session.id}`);
+        return session.id;
+    } catch (error) {
+        logger.error('Error creating session:', error);
+        throw error;
+    }
+}
+
+async function updateSession(sessionId, updates) {
+    try {
+        const changes = [];
+        const values = [];
+
+        if (updates.aggregated_files !== undefined) {
+            changes.push('aggregated_files = ?');
+            values.push(typeof updates.aggregated_files === 'string' ? updates.aggregated_files : JSON.stringify(updates.aggregated_files));
+        }
+        if (updates.aggregated_urls !== undefined) {
+            changes.push('aggregated_urls = ?');
+            values.push(typeof updates.aggregated_urls === 'string' ? updates.aggregated_urls : JSON.stringify(updates.aggregated_urls));
+        }
+        if (updates.summary !== undefined) {
+            changes.push('summary = ?');
+            values.push(updates.summary);
+        }
+        if (updates.concepts !== undefined) {
+            changes.push('concepts = ?');
+            values.push(typeof updates.concepts === 'string' ? updates.concepts : JSON.stringify(updates.concepts));
+        }
+
+        changes.push('updated_at = ?');
+        values.push(new Date().toISOString());
+        values.push(sessionId);
+
+        if (changes.length > 1) { // More than just updated_at
+            await dbClient.execute(`
+                UPDATE activity_sessions
+                SET ${changes.join(', ')}
+                WHERE id = ?
+            `, values);
+            logger.debug(`Session updated: ${sessionId}`);
+        }
+    } catch (error) {
+        logger.error('Error updating session:', error);
+        throw error;
+    }
+}
+
+async function closeSession(sessionId, updates) {
+    try {
+        await dbClient.execute(`
+            UPDATE activity_sessions
+            SET end_time = ?,
+                duration_seconds = ?,
+                summary = ?,
+                concepts = ?,
+                updated_at = ?
+            WHERE id = ?
+        `, [
+            updates.end_time,
+            updates.duration_seconds,
+            updates.summary || null,
+            updates.concepts ? JSON.stringify(updates.concepts) : null,
+            new Date().toISOString(),
+            sessionId,
+        ]);
+        logger.info(`Session closed: ${sessionId}`);
+    } catch (error) {
+        logger.error('Error closing session:', error);
+        throw error;
+    }
+}
+
+async function getActiveSession() {
+    try {
+        const result = await dbClient.execute(`
+            SELECT * FROM activity_sessions
+            WHERE end_time IS NULL
+            ORDER BY start_time DESC
+            LIMIT 1
+        `);
+        return result.rows[0] || null;
+    } catch (error) {
+        logger.error('Error getting active session:', error);
+        return null;
+    }
+}
+
+async function getSessionById(sessionId) {
+    try {
+        const result = await dbClient.execute(`
+            SELECT * FROM activity_sessions
+            WHERE id = ?
+            LIMIT 1
+        `, [sessionId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        logger.error('Error getting session by ID:', error);
+        return null;
+    }
+}
+
 export {
     initializeDatabase,
     getDatabase,
@@ -689,7 +930,7 @@ export {
     getTodayActivityCount,
     closeDatabase,
     insertSummaryWithAI,
-    updateActivity, // NEW
+    updateActivity, 
     getAllActivities,
     getAllSummaries,
     clearAllData,
@@ -700,4 +941,10 @@ export {
     getAllFiles,
     insertFileChunk,
     getFileChunks,
+    createSession,
+    updateSession,
+    closeSession,
+    getActiveSession,
+    getSessionById,
+    getActivitiesBySession,
 };

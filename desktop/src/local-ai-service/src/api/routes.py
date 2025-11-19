@@ -35,6 +35,17 @@ from src.services.llamaindex_service import (
     create_query_engine,
 )
 from llama_index.core import Document
+from src.api.schemas import (
+    ClassifyActivityRequest,
+    ClassifyActivityResponse,
+    BatchClassifyRequest,
+    BatchClassifyResponse,
+)
+from src.services.activity_classifier_ml import (
+    classify_activity_ml,
+    batch_classify_activities,
+    should_use_ml_classifier,
+)
 
 logger = setup_logger()
 router = APIRouter()
@@ -429,3 +440,49 @@ async def llamaindex_create_router_engine(request: dict):
     except Exception as e:
         logger.error(f"Error creating router engine: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/classify-activity", response_model=ClassifyActivityResponse)
+async def classify_activity(request: ClassifyActivityRequest):
+    """Classify activity using ML (if tier supports) or rule-based"""
+    try:
+        result = await classify_activity_ml(
+            app_name=request.app_name,
+            window_title=request.window_title,
+            url=request.url,
+            content_snippet=request.content_snippet,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in classify-activity endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/batch-classify", response_model=BatchClassifyResponse)
+async def batch_classify(request: BatchClassifyRequest):
+    """Classify multiple activities in batch"""
+    try:
+        results = await batch_classify_activities(request.activities)
+        return BatchClassifyResponse(results=results)
+    except Exception as e:
+        logger.error(f"Error in batch-classify endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/classifier/status")
+async def get_classifier_status():
+    """Get classifier status (ML available or rule-based only)"""
+    try:
+        use_ml = should_use_ml_classifier()
+        model_manager = get_model_manager()
+        tier = model_manager.get_recommended_tier() if not settings.MODEL_TIER else settings.MODEL_TIER
+        
+        return {
+            "ml_available": use_ml,
+            "tier": tier,
+            "method": "ml" if use_ml else "rule-based",
+        }
+    except Exception as e:
+        logger.error(f"Error getting classifier status: {e}")
+        return {
+            "ml_available": False,
+            "tier": "UNKNOWN",
+            "method": "rule-based",
+        }

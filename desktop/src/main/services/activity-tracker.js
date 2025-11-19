@@ -7,6 +7,12 @@ import { checkWhitelist } from '../filters/whitelist-manager.js';
 import logger from '../utils/logger.js';
 import { getMainWindow } from '../windows/main-window.js';
 import { extractContent } from './content-extractor.js';
+import { classifyActivity, isLearningActivity } from '../filters/activity-classifier.js';
+import { getOrCreateSession, initializeSessionManager } from './activity/activity-session-manager.js';
+import { checkSignificance, markActivityStart, markActivityEnd } from '../filters/activity-significance-filter.js';
+import { applyRules, logFilteredActivity } from './activity/activity-rules-engine.js';
+import aggregator from './activity/activity-aggregator.js';
+
 
 let trackingInterval = null;
 let isTracking = false;
@@ -29,6 +35,9 @@ async function startTracking() {
 
     isTracking = true;
     isPaused = false;
+
+    // Initialize session manager
+    await initializeSessionManager();
 
     const appConfig = getAppConfig();
     const interval = appConfig.trackingInterval || 60000; // Default 60 seconds
@@ -101,6 +110,8 @@ async function resumeTracking() {
     return { success: true };
 }
 
+const activityDurations = new Map();
+
 // Check current activity
 async function checkActivity() {
     try {
@@ -133,26 +144,73 @@ async function checkActivity() {
             return;
         }
 
-        // Classify activity
-        const classification = classifyActivity(activity);
-        if (!isLearningActivity(classification)) {
-            logger.debug('Activity classified as non-learning:', classification);
-            return;
-        }
+        // Classify activity (now async)
+        const classification = await classifyActivity(activity);
+
+        // Store activity_type from classification
+        activity.activity_type = classification.type;
+        activity.confidence = classification.confidence;
 
         // Determine source type
         activity.source_type = determineSourceType(activity);
 
+        // Get or create session for this activity
+        const session = await getOrCreateSession(activity, lastActivity);
+        activity.session_id = session.id;
+        activity.activity_type = session.activity_type;
+
+        // Extract additional metadata based on activity type
+        if (activity.activity_type === 'coding') {
+            const projectInfo = extractProjectInfo(activity);
+            activity.project_name = projectInfo.projectName;
+        } else if (activity.activity_type === 'reading') {
+            activity.file_path = activity.window_title;
+        } else if (activity.activity_type === 'watching') {
+            const videoId = extractVideoId(activity.url);
+            if (videoId) {
+                activity.video_id = videoId;
+            }
+        }
+
+        // NEW: Apply tracking rules
+        const rulesResult = await applyRules(activity, lastActivity);
+
+        if (!rulesResult.shouldTrack) {
+            logFilteredActivity(activity, rulesResult.reason);
+            // Mark activity end for previous activity if switching
+            if (lastActivity) {
+                markActivityEnd(lastActivity);
+            }
+            markActivityStart(activity); // Start tracking new activity
+            return; // Don't store this activity
+        }
+
+        // NEW: Check significance
+        const significance = await checkSignificance(activity, lastActivity);
+
+        if (!significance.isSignificant) {
+            logFilteredActivity(activity, significance.reason);
+            // Still mark start for duration tracking
+            markActivityStart(activity);
+            return; // Don't store insignificant activity
+        }
+
+        // Mark end of previous activity and start of new one
+        if (lastActivity) {
+            markActivityEnd(lastActivity);
+        }
+        markActivityStart(activity);
+
         // Store activity
         try {
-            const activityId = await insertActivity(activity); // <-- add await
-            logger.info(`Activity captured: ${activity.app_name} - ${activity.window_title} (ID: ${activityId})`);
+            const activityId = await insertActivity(activity);
+            logger.info(`Activity captured: ${activity.app_name} - ${activity.window_title} (ID: ${activityId}, Session: ${session.id})`);
 
             extractContent(activity)
                 .then(async extractedActivity => {
                     // Update activity with extracted content
                     const { title, content, url } = extractedActivity;
-                    await updateActivity(activityId, { title, content, url }); // <-- add await
+                    await updateActivity(activityId, { title, content, url });
                 })
                 .catch(error => {
                     logger.error('Error extracting content:', error);
@@ -183,6 +241,20 @@ function isSameWindow(current, previous) {
         current.title === previous.title &&
         extractUrl(current) === extractUrl(previous)
     );
+}
+
+// Extract video ID from YouTube URL
+function extractVideoId(url) {
+    if (!url) return null;
+    const patterns = [
+        /[?&]v=([^&]+)/,
+        /youtu\.be\/([^?]+)/,
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+    }
+    return null;
 }
 
 // Extract URL from window info

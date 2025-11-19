@@ -11,8 +11,66 @@ export const activities = sqliteTable('activities', {
     sourceType: text('source_type').notNull(),
     appName: text('app_name'),
     windowTitle: text('window_title'),
+    // NEW FIELDS for Stage 1
+    sessionId: text('session_id'),
+    activityType: text('activity_type'), // 'coding', 'reading', 'watching', etc.
+    projectName: text('project_name'),
+    filePath: text('file_path'),
+    videoId: text('video_id'),
+    gameName: text('game_name'),
+    isMeaningful: integer('is_meaningful', { mode: 'boolean' }).default(true),
+    confidence: real('confidence'),
+    metadata: text('metadata'), // JSON string
+    embeddingId: text('embedding_id'),
     createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
     updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+});
+
+// NEW: Activity Sessions table
+export const activitySessions = sqliteTable('activity_sessions', {
+    id: text('id').primaryKey(),
+    activityType: text('activity_type').notNull(),
+    startTime: text('start_time').notNull(),
+    endTime: text('end_time'),
+    durationSeconds: integer('duration_seconds'),
+    projectName: text('project_name'),
+    aggregatedFiles: text('aggregated_files'), // JSON string
+    aggregatedUrls: text('aggregated_urls'), // JSON string
+    summary: text('summary'),
+    concepts: text('concepts'), // JSON string
+    confidence: real('confidence'),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+    updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+});
+
+// NEW: Activity Entities table (for knowledge graph)
+export const activityEntities = sqliteTable('activity_entities', {
+    id: text('id').primaryKey(),
+    activityId: integer('activity_id').references(() => activities.id, {
+        onDelete: 'cascade',
+    }),
+    sessionId: text('session_id').references(() => activitySessions.id, {
+        onDelete: 'cascade',
+    }),
+    entityType: text('entity_type'), // 'movie', 'game', 'topic', etc.
+    entityName: text('entity_name'),
+    entityValue: text('entity_value'), // JSON string
+    confidence: real('confidence'),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+});
+
+// NEW: Semantic Index table (metadata for LanceDB)
+export const semanticIndex = sqliteTable('semantic_index', {
+    id: text('id').primaryKey(),
+    activityId: integer('activity_id').references(() => activities.id, {
+        onDelete: 'cascade',
+    }),
+    sessionId: text('session_id').references(() => activitySessions.id, {
+        onDelete: 'cascade',
+    }),
+    embeddingVector: text('embedding_vector'), // Reference to LanceDB
+    searchText: text('search_text'),
+    createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
 });
 
 // Summaries table

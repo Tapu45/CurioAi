@@ -49,3 +49,23 @@ class ProcessContentResponse(BaseModel):
     summary: Optional[SummarizeResponse] = None
     embedding: Optional[EmbeddingResponse] = None
     concepts: Optional[ExtractConceptsResponse] = None
+
+# Add these to schemas.py
+
+class ClassifyActivityRequest(BaseModel):
+    app_name: str = Field(..., description="Application name")
+    window_title: str = Field(..., description="Window title")
+    url: Optional[str] = Field(None, description="URL (if browser activity)")
+    content_snippet: Optional[str] = Field(None, description="Content snippet")
+
+class ClassifyActivityResponse(BaseModel):
+    activity_type: str  # 'coding', 'reading', 'watching', etc.
+    confidence: float  # 0.0 to 1.0
+    metadata: Dict[str, Any] = {}
+    reason: str
+
+class BatchClassifyRequest(BaseModel):
+    activities: List[ClassifyActivityRequest]
+
+class BatchClassifyResponse(BaseModel):
+    results: List[ClassifyActivityResponse]

@@ -1,63 +1,15 @@
-import { extractBrowserContent } from '../extractors/browser-extractor.js';
-import { extractPDFContent } from '../extractors/pdf-extractor.js';
-import { extractYouTubeTranscript } from '../extractors/youtube-extractor.js';
-import { extractCodeContent } from '../extractors/code-extractor.js';
+import { extractActivityContext } from './activity-context-extractor.js';
 import { cleanText, normalizeText } from '../extractors/text-processor.js';
 import { anonymizeActivity } from '../filters/privacy-filters.js';
 import { getPrivacyConfig } from '../utils/config-manager.js';
 import logger from '../utils/logger.js';
 import { processContent as processWithAI } from './ai-service-client.js';
 
-// Extract content based on activity type
+// Extract content based on activity type (enhanced with context extractor)
 async function extractContent(activity) {
     try {
-        let extractedContent = {
-            title: activity.window_title || '',
-            content: '',
-            url: activity.url || null,
-            metadata: {},
-        };
-
-        const sourceType = activity.source_type || 'other';
-
-        logger.info(`Extracting content for ${sourceType}: ${activity.app_name}`);
-
-        switch (sourceType) {
-            case 'browser':
-                extractedContent = await extractBrowserContent(activity);
-                break;
-            case 'video':
-                if (activity.url?.includes('youtube.com')) {
-                    extractedContent = await extractYouTubeTranscript(activity);
-                } else {
-                    extractedContent = await extractBrowserContent(activity);
-                }
-                break;
-            case 'pdf':
-                extractedContent = await extractPDFContent(activity);
-                break;
-            case 'code':
-                extractedContent = await extractCodeContent(activity);
-                break;
-            case 'document':
-                extractedContent = {
-                    title: activity.window_title || '',
-                    content: '',
-                    url: null,
-                    metadata: {
-                        app: activity.app_name,
-                    },
-                };
-                break;
-            default:
-                logger.debug(`No specific extractor for source type: ${sourceType}`);
-                extractedContent = {
-                    title: activity.window_title || '',
-                    content: '',
-                    url: activity.url || null,
-                    metadata: {},
-                };
-        }
+        // Use the new context extractor
+        let extractedContent = await extractActivityContext(activity);
 
         // Clean and normalize text
         if (extractedContent.content) {
